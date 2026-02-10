@@ -25,6 +25,14 @@ type ParsedItem = {
   r2Url: string;
 };
 
+type LogTone = "info" | "success" | "error" | "action";
+
+type LogEntry = {
+  id: string;
+  message: string;
+  tone: LogTone;
+};
+
 const pad2 = (value: number) => String(value).padStart(2, "0");
 
 const formatDateYYMMDD = (date: Date) => {
@@ -141,10 +149,8 @@ const parseRss = (
 };
 
 function App() {
-  const [rssUrl, setRssUrl] = useState(
-    "https://cdn.audiorella.com/podcasts/1750-dick-doof/feed.rss",
-  );
-  const [programId, setProgramId] = useState("408");
+  const [rssUrl, setRssUrl] = useState("");
+  const [programId, setProgramId] = useState("");
   const [language, setLanguage] = useState("de");
   const [limit, setLimit] = useState("4");
   const [channelTitle, setChannelTitle] = useState("");
@@ -155,11 +161,38 @@ function App() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
-  const [logs, setLogs] = useState<string[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [processState, setProcessState] = useState({
+    label: "대기 중",
+    tone: "idle",
+  });
+  const [downloadProgress, setDownloadProgress] = useState<
+    Record<string, number | null>
+  >({});
+  const [downloadSummary, setDownloadSummary] = useState({
+    total: 0,
+    completed: 0,
+  });
 
-  const addLog = (message: string) => {
+  const addLog = (message: string, tone: LogTone = "info") => {
     const timestamp = new Date().toLocaleTimeString();
-    setLogs((prev) => [...prev, `[${timestamp}] ${message}`]);
+    const entry: LogEntry = {
+      id: `${Date.now()}-${Math.random()}`,
+      message: `${timestamp} · ${message}`,
+      tone,
+    };
+    setLogs((prev) => [...prev, entry]);
+  };
+
+  const setProcess = (
+    label: string,
+    tone: "idle" | "working" | "success" | "error",
+  ) => {
+    setProcessState({ label, tone });
+  };
+
+  const updateProgress = (filename: string, value: number | null) => {
+    setDownloadProgress((prev) => ({ ...prev, [filename]: value }));
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -167,16 +200,18 @@ function App() {
     setError("");
     setStatus("");
     setLogs([]);
+    setProcess("RSS 요청 중", "working");
     setIsLoading(true);
 
     try {
-      addLog("RSS feed 요청 중...");
+      addLog("RSS feed 요청 중...", "action");
       const response = await fetch(rssUrl);
       if (!response.ok) {
         throw new Error(`Request failed with ${response.status}.`);
       }
       const xmlText = await response.text();
-      addLog("RSS 수신 완료. 파싱 중...");
+      setProcess("RSS 파싱 중", "working");
+      addLog("RSS 수신 완료. 파싱 중...", "info");
       const limitNumber = Math.max(1, Number(limit) || 1);
       const programNumber = Number(programId) || 0;
       const parsed = parseRss(xmlText, limitNumber, programNumber, language);
@@ -187,12 +222,15 @@ function App() {
       setSqlText(parsed.sqlText);
       addLog(
         `'${parsed.channelTitle}' ${parsed.items.length}개 항목 파싱 완료.`,
+        "success",
       );
-      addLog("SQL 생성 완료.");
+      addLog("SQL 생성 완료.", "success");
+      setProcess("SQL 생성 완료", "success");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setError(message);
-      addLog(`오류: ${message}`);
+      addLog(`오류: ${message}`, "error");
+      setProcess("오류 발생", "error");
       setChannelTitle("");
       setItems([]);
       setRows([]);
@@ -216,7 +254,8 @@ function App() {
     setIsSending(true);
 
     try {
-      addLog(`Supabase에 ${rows.length}개 항목 전송 중...`);
+      setProcess("Supabase 전송 중", "working");
+      addLog(`Supabase에 ${rows.length}개 항목 전송 중...`, "action");
       const { error: insertError } = await supabase
         .from("episodes")
         .insert(rows);
@@ -224,11 +263,13 @@ function App() {
         throw insertError;
       }
       setStatus(`Inserted ${rows.length} rows into Supabase.`);
-      addLog("Supabase insert 완료.");
+      addLog("Supabase insert 완료.", "success");
+      setProcess("Supabase 전송 완료", "success");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Insert failed.";
       setError(message);
-      addLog(`Supabase insert 실패: ${message}`);
+      addLog(`Supabase insert 실패: ${message}`, "error");
+      setProcess("Supabase 전송 실패", "error");
     } finally {
       setIsSending(false);
     }
@@ -236,12 +277,49 @@ function App() {
 
   const downloadFile = async (url: string, filename: string) => {
     try {
-      addLog(`다운로드 시작: ${filename}`);
+      setProcess("다운로드 중", "working");
+      addLog(`다운로드 시작: ${filename}`, "action");
+      updateProgress(filename, 0);
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Download failed with ${response.status}.`);
       }
-      const blob = await response.blob();
+      const totalBytes = Number(response.headers.get("content-length") || 0);
+      if (!response.body || !totalBytes) {
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = objectUrl;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(objectUrl);
+        updateProgress(filename, 100);
+        addLog(`다운로드 완료: ${filename}`, "success");
+        setProcess("다운로드 완료", "success");
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let receivedBytes = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          receivedBytes += value.length;
+          const percent = Math.min(
+            100,
+            Math.round((receivedBytes / totalBytes) * 100),
+          );
+          updateProgress(filename, percent);
+        }
+      }
+
+      const blob = new Blob(chunks);
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;
@@ -250,22 +328,41 @@ function App() {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(objectUrl);
-      addLog(`다운로드 완료: ${filename}`);
+      addLog(`다운로드 완료: ${filename}`, "success");
+      updateProgress(filename, 100);
+      setProcess("다운로드 완료", "success");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Download failed.";
-      addLog(`다운로드 실패: ${filename} - ${message}`);
+      addLog(`다운로드 실패: ${filename} - ${message}`, "error");
+      updateProgress(filename, null);
+      setProcess("다운로드 실패", "error");
     }
   };
 
   const handleDownloadAll = async () => {
     if (!items.length) return;
-    addLog(`전체 다운로드 시작 (${items.length}개)`);
+    setProcess("전체 다운로드 중", "working");
+    addLog(`전체 다운로드 시작 (${items.length}개)`, "action");
+    setDownloadSummary({ total: items.length, completed: 0 });
+    let hasError = false;
     for (const item of items) {
       if (item.audioUrl) {
-        await downloadFile(item.audioUrl, item.filename);
+        try {
+          await downloadFile(item.audioUrl, item.filename);
+          setDownloadSummary((prev) => ({
+            total: prev.total,
+            completed: prev.completed + 1,
+          }));
+        } catch {
+          hasError = true;
+        }
       }
     }
-    addLog("전체 다운로드 완료");
+    addLog("전체 다운로드 완료", hasError ? "error" : "success");
+    setProcess(
+      hasError ? "다운로드 일부 실패" : "전체 다운로드 완료",
+      hasError ? "error" : "success",
+    );
   };
 
   return (
@@ -310,6 +407,7 @@ function App() {
                 type="number"
                 value={programId}
                 onChange={(event) => setProgramId(event.target.value)}
+                placeholder="000"
                 min={0}
               />
             </label>
@@ -366,16 +464,24 @@ function App() {
         <div className="log-panel">
           <div className="log-header">
             <h3>Processing Log</h3>
-            <span className="muted">실시간 상태 표시</span>
+            <span className="muted">진행 상태 요약</span>
+            <span className={`status-pill ${processState.tone}`}>
+              {processState.label}
+            </span>
           </div>
           <div className="log-body" aria-live="polite">
-            {logs.length ? (
-              logs.map((entry, index) => (
-                <p key={`${entry}-${index}`}>{entry}</p>
-              ))
-            ) : (
-              <p className="muted">아직 실행 로그가 없습니다.</p>
-            )}
+            <div className="log-list">
+              {logs.length ? (
+                logs.map((entry) => (
+                  <div key={entry.id} className={`log-item ${entry.tone}`}>
+                    <span className="log-dot" />
+                    <p>{entry.message}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="muted">아직 실행 로그가 없습니다.</p>
+              )}
+            </div>
           </div>
         </div>
         {error && <div className="error">{error}</div>}
@@ -392,6 +498,11 @@ function App() {
                 : "No feed loaded yet."}
             </p>
           </div>
+          {downloadSummary.total > 0 && (
+            <div className="download-summary">
+              Download {downloadSummary.completed}/{downloadSummary.total}
+            </div>
+          )}
           <div className="header-actions">
             <button className="ghost" onClick={handleCopy} disabled={!sqlText}>
               Copy SQL
@@ -441,12 +552,28 @@ function App() {
                   onClick={() => downloadFile(item.audioUrl, item.filename)}
                   disabled={!item.audioUrl}
                 >
-                  Download
+                  {downloadProgress[item.filename] != null
+                    ? `Download ${downloadProgress[item.filename]}%`
+                    : "Download"}
                 </button>
                 <a href={item.r2Url} target="_blank" rel="noreferrer">
                   R2 URL
                 </a>
               </div>
+              {downloadProgress[item.filename] != null && (
+                <div className="download-progress">
+                  <div className="progress-bar">
+                    <span
+                      style={{
+                        width: `${downloadProgress[item.filename]}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="progress-text">
+                    {downloadProgress[item.filename]}%
+                  </span>
+                </div>
+              )}
             </article>
           ))}
           {!items.length && (
