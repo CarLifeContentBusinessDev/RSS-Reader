@@ -166,21 +166,89 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .log-body {
-  max-height: 220px;
+  max-height: 260px;
   overflow-y: auto;
-  background: #0f1515;
-  color: #e6f4f1;
-  border-radius: 14px;
-  padding: 0.75rem 1rem;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 0.85rem;
+  background: #f6f4ef;
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(16, 35, 35, 0.08);
 }
 
-.log-body p {
-  margin: 0 0 0.5rem;
+.status-pill {
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: rgba(16, 35, 35, 0.08);
+  color: var(--ink);
+}
+
+.status-pill.working {
+  background: rgba(242, 201, 76, 0.35);
+  color: #6b4d00;
+}
+
+.status-pill.success {
+  background: rgba(120, 210, 160, 0.3);
+  color: #245c3d;
+}
+
+.status-pill.error {
+  background: rgba(255, 120, 120, 0.25);
+  color: #742b2b;
+}
+
+.log-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.log-item {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 0.6rem;
+  align-items: start;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(16, 35, 35, 0.08);
+  box-shadow: 0 8px 16px rgba(16, 35, 35, 0.06);
+}
+
+.log-item p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.log-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 0.35rem;
+  background: rgba(16, 35, 35, 0.2);
+}
+
+.log-item.action .log-dot {
+  background: var(--accent-strong);
+}
+
+.log-item.success .log-dot {
+  background: rgba(120, 210, 160, 0.9);
+}
+
+.log-item.error .log-dot {
+  background: rgba(255, 120, 120, 0.9);
+}
+
+.log-item.info .log-dot {
+  background: rgba(16, 35, 35, 0.35);
 }
 
 .error {
@@ -211,6 +279,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.download-summary {
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(16, 35, 35, 0.08);
+  color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .header-actions {
@@ -281,6 +358,34 @@
 .link-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.download-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(16, 35, 35, 0.1);
+  overflow: hidden;
+}
+
+.progress-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(120deg, var(--accent), var(--accent-strong));
+  transition: width 0.2s ease;
+}
+
+.progress-text {
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+  min-width: 42px;
+  text-align: right;
 }
 
 .empty {
