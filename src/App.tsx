@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import { supabase } from "./supabaseClient";
 
@@ -31,6 +31,33 @@ type LogEntry = {
   id: string;
   message: string;
   tone: LogTone;
+};
+
+type ToastTone = "info" | "success" | "error";
+
+const parseSqlToRows = (sqlText: string): EpisodeRow[] => {
+  const rowPattern =
+    /\(\s*'((?:''|[^'])*)'\s*,\s*(\d+)\s*,\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*ARRAY\[\s*'((?:''|[^'])*)'\s*\]\s*\)/g;
+  const rows: EpisodeRow[] = [];
+
+  for (const match of sqlText.matchAll(rowPattern)) {
+    const [, titleRaw, programIdRaw, audioRaw, dateRaw, durationRaw, language] =
+      match;
+    rows.push({
+      title: titleRaw.replace(/''/g, "'"),
+      program_id: Number(programIdRaw),
+      audio_file: audioRaw.replace(/''/g, "'"),
+      date: dateRaw.replace(/''/g, "'"),
+      duration: durationRaw.replace(/''/g, "'"),
+      language: [language.replace(/''/g, "'")],
+    });
+  }
+
+  if (!rows.length) {
+    throw new Error("SQL에서 삽입할 항목을 찾지 못했습니다.");
+  }
+
+  return rows;
 };
 
 const pad2 = (value: number) => String(value).padStart(2, "0");
@@ -87,11 +114,11 @@ const parseRss = (
   const parseError = doc.querySelector("parsererror");
 
   if (parseError) {
-    throw new Error("Invalid XML response.");
+    throw new Error("유효하지 않은 XML 응답입니다.");
   }
 
   const channelTitleRaw =
-    doc.querySelector("channel > title")?.textContent?.trim() || "Untitled";
+    doc.querySelector("channel > title")?.textContent?.trim() || "제목 없음";
   const channelTitle = channelTitleRaw.replace(/[\\/*?:"<>|]/g, "").trim();
 
   const itemNodes = Array.from(doc.querySelectorAll("channel item")).slice(
@@ -101,7 +128,7 @@ const parseRss = (
 
   const items: ParsedItem[] = itemNodes.map((item, index) => {
     const title =
-      item.querySelector("title")?.textContent?.trim() || "Untitled";
+      item.querySelector("title")?.textContent?.trim() || "제목 없음";
     const enclosure = item.querySelector("enclosure");
     const audioUrl = enclosure?.getAttribute("url") || "";
     const pubDateRaw = item.querySelector("pubDate")?.textContent || "";
@@ -153,10 +180,20 @@ function App() {
   const [programId, setProgramId] = useState("");
   const [language, setLanguage] = useState("de");
   const [limit, setLimit] = useState("4");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authUserEmail, setAuthUserEmail] = useState<string | null>(null);
+  const [isAuthBusy, setIsAuthBusy] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastTone, setToastTone] = useState<ToastTone>("info");
   const [channelTitle, setChannelTitle] = useState("");
   const [items, setItems] = useState<ParsedItem[]>([]);
   const [rows, setRows] = useState<EpisodeRow[]>([]);
   const [sqlText, setSqlText] = useState("");
+  const [originalRows, setOriginalRows] = useState<EpisodeRow[]>([]);
+  const [originalSqlText, setOriginalSqlText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
@@ -173,6 +210,40 @@ function App() {
     total: 0,
     completed: 0,
   });
+  const toastTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadSession = async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) return;
+      if (!isMounted) return;
+      setAuthUserEmail(data.session?.user.email ?? null);
+    };
+
+    loadSession();
+
+    const { data: subscription } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (!isMounted) return;
+        setAuthUserEmail(session?.user.email ?? null);
+      },
+    );
+
+    return () => {
+      isMounted = false;
+      subscription.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const addLog = (message: string, tone: LogTone = "info") => {
     const timestamp = new Date().toLocaleTimeString();
@@ -195,6 +266,61 @@ function App() {
     setDownloadProgress((prev) => ({ ...prev, [filename]: value }));
   };
 
+  const showToast = (message: string, tone: ToastTone = "info") => {
+    setToastMessage(message);
+    setToastTone(tone);
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToastMessage("");
+    }, 2200);
+  };
+
+  const handleSignIn = async () => {
+    if (!authEmail || !authPassword) {
+      setAuthError("이메일과 비밀번호를 입력해주세요.");
+      return;
+    }
+    setAuthError("");
+    setStatus("");
+    setIsAuthBusy(true);
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: authEmail,
+        password: authPassword,
+      });
+      if (error) throw error;
+      setStatus("로그인 완료.");
+      setAuthPassword("");
+      setShowAuthModal(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "알 수 없는 오류";
+      setAuthError(`로그인 실패 : ${message}`);
+    } finally {
+      setIsAuthBusy(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    setAuthError("");
+    setStatus("");
+    setIsAuthBusy(true);
+
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      setStatus("로그아웃 완료.");
+      setShowAuthModal(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "알 수 없는 오류";
+      setAuthError(`로그아웃 실패: ${message}`);
+    } finally {
+      setIsAuthBusy(false);
+    }
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
@@ -204,10 +330,12 @@ function App() {
     setIsLoading(true);
 
     try {
-      addLog("RSS feed 요청 중...", "action");
-      const response = await fetch(rssUrl);
+      addLog("RSS 요청 중...", "action");
+      const response = await fetch(
+        `/api/rss?url=${encodeURIComponent(rssUrl)}`,
+      );
       if (!response.ok) {
-        throw new Error(`Request failed with ${response.status}.`);
+        throw new Error(`요청 실패: 상태 코드 ${response.status}.`);
       }
       const xmlText = await response.text();
       setProcess("RSS 파싱 중", "working");
@@ -220,6 +348,8 @@ function App() {
       setItems(parsed.items);
       setRows(parsed.rows);
       setSqlText(parsed.sqlText);
+      setOriginalRows(parsed.rows);
+      setOriginalSqlText(parsed.sqlText);
       addLog(
         `'${parsed.channelTitle}' ${parsed.items.length}개 항목 파싱 완료.`,
         "success",
@@ -227,7 +357,8 @@ function App() {
       addLog("SQL 생성 완료.", "success");
       setProcess("SQL 생성 완료", "success");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error.";
+      const message =
+        err instanceof Error ? err.message : "알 수 없는 오류입니다.";
       setError(message);
       addLog(`오류: ${message}`, "error");
       setProcess("오류 발생", "error");
@@ -235,6 +366,8 @@ function App() {
       setItems([]);
       setRows([]);
       setSqlText("");
+      setOriginalRows([]);
+      setOriginalSqlText("");
     } finally {
       setIsLoading(false);
     }
@@ -243,30 +376,36 @@ function App() {
   const handleCopy = async () => {
     if (!sqlText) return;
     await navigator.clipboard.writeText(sqlText);
-    setStatus("SQL copied to clipboard.");
+    setStatus("SQL을 클립보드에 복사했습니다.");
     window.setTimeout(() => setStatus(""), 2000);
   };
 
   const handleInsert = async () => {
-    if (!rows.length) return;
+    if (!authUserEmail) {
+      showToast("로그인 후 전송할 수 있습니다.", "error");
+      setShowAuthModal(true);
+      return;
+    }
+    if (!sqlText.trim()) return;
     setError("");
     setStatus("");
     setIsSending(true);
 
     try {
       setProcess("Supabase 전송 중", "working");
-      addLog(`Supabase에 ${rows.length}개 항목 전송 중...`, "action");
+      const rowsToInsert = parseSqlToRows(sqlText);
+      addLog(`Supabase에 ${rowsToInsert.length}개 항목 전송 중...`, "action");
       const { error: insertError } = await supabase
         .from("episodes")
-        .insert(rows);
+        .insert(rowsToInsert);
       if (insertError) {
         throw insertError;
       }
-      setStatus(`Inserted ${rows.length} rows into Supabase.`);
+      setStatus(`Supabase에 ${rowsToInsert.length}개 항목을 추가했습니다.`);
       addLog("Supabase insert 완료.", "success");
       setProcess("Supabase 전송 완료", "success");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Insert failed.";
+      const message = err instanceof Error ? err.message : "추가 실패.";
       setError(message);
       addLog(`Supabase insert 실패: ${message}`, "error");
       setProcess("Supabase 전송 실패", "error");
@@ -282,7 +421,7 @@ function App() {
       updateProgress(filename, 0);
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error(`Download failed with ${response.status}.`);
+        throw new Error(`다운로드 실패: 상태 코드 ${response.status}.`);
       }
       const totalBytes = Number(response.headers.get("content-length") || 0);
       if (!response.body || !totalBytes) {
@@ -319,7 +458,10 @@ function App() {
         }
       }
 
-      const blob = new Blob(chunks);
+      const blobParts: BlobPart[] = chunks.map(
+        (chunk) => chunk.slice().buffer as ArrayBuffer,
+      );
+      const blob = new Blob(blobParts);
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;
@@ -332,7 +474,7 @@ function App() {
       updateProgress(filename, 100);
       setProcess("다운로드 완료", "success");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Download failed.";
+      const message = err instanceof Error ? err.message : "다운로드 실패.";
       addLog(`다운로드 실패: ${filename} - ${message}`, "error");
       updateProgress(filename, null);
       setProcess("다운로드 실패", "error");
@@ -367,13 +509,41 @@ function App() {
 
   return (
     <div className="app">
+      <div className="top-bar">
+        <div className="top-actions">
+          {authUserEmail ? (
+            <>
+              <span className="user-chip">{authUserEmail}</span>
+              <button
+                className="ghost"
+                type="button"
+                onClick={handleSignOut}
+                disabled={isAuthBusy}
+              >
+                {isAuthBusy ? "로그아웃 중..." : "로그아웃"}
+              </button>
+            </>
+          ) : (
+            <button
+              className="primary"
+              type="button"
+              onClick={() => {
+                setAuthError("");
+                setShowAuthModal(true);
+              }}
+            >
+              로그인
+            </button>
+          )}
+        </div>
+      </div>
       <header className="hero">
         <div>
-          <p className="eyebrow">RSS to SQL + Supabase</p>
-          <h1>Podcast Episode Builder</h1>
+          <p className="eyebrow">RSS → SQL + Supabase</p>
+          <h1>RSS Episode Builder</h1>
           <p className="subhead">
-            Paste a feed URL, pick program and language, then generate SQL or
-            push directly to Supabase.
+            RSS 주소를 넣고 프로그램과 언어를 고르면 SQL을 만들거나 Supabase로
+            바로 전송할 수 있습니다.
           </p>
         </div>
         <div className="hero-card">
@@ -391,7 +561,7 @@ function App() {
       <section className="panel">
         <form className="form" onSubmit={handleSubmit}>
           <label className="field">
-            <span>RSS feed URL</span>
+            <span>RSS URL</span>
             <input
               type="url"
               value={rssUrl}
@@ -412,7 +582,7 @@ function App() {
               />
             </label>
             <label className="field">
-              <span>Language code</span>
+              <span>Language</span>
               <input
                 type="text"
                 value={language}
@@ -422,7 +592,7 @@ function App() {
               />
             </label>
             <label className="field">
-              <span>Item limit</span>
+              <span>Limit</span>
               <input
                 type="number"
                 value={limit}
@@ -434,7 +604,7 @@ function App() {
           </div>
           <div className="actions">
             <button className="primary" type="submit" disabled={isLoading}>
-              {isLoading ? "Processing..." : "Generate SQL"}
+              {isLoading ? "처리 중..." : "SQL 생성"}
             </button>
             <button
               className="ghost"
@@ -452,19 +622,14 @@ function App() {
                 setStatus("");
               }}
             >
-              Reset
+              초기화
             </button>
           </div>
         </form>
-
-        <div className="notice">
-          <strong>Heads up:</strong> Some feeds block browser requests with
-          CORS. Use a proxy or a tiny backend if you see errors.
-        </div>
         <div className="log-panel">
           <div className="log-header">
-            <h3>Processing Log</h3>
-            <span className="muted">진행 상태 요약</span>
+            <h3>처리 로그</h3>
+            <span className="muted">진행 요약</span>
             <span className={`status-pill ${processState.tone}`}>
               {processState.label}
             </span>
@@ -491,35 +656,35 @@ function App() {
       <section className="panel results">
         <div className="panel-header">
           <div>
-            <h2>Parsed Items</h2>
+            <h2>파싱된 항목</h2>
             <p className="muted">
               {channelTitle
-                ? `Channel: ${channelTitle}`
-                : "No feed loaded yet."}
+                ? `채널: ${channelTitle}`
+                : "아직 불러온 피드가 없습니다."}
             </p>
           </div>
           {downloadSummary.total > 0 && (
             <div className="download-summary">
-              Download {downloadSummary.completed}/{downloadSummary.total}
+              다운로드 {downloadSummary.completed}/{downloadSummary.total}
             </div>
           )}
           <div className="header-actions">
             <button className="ghost" onClick={handleCopy} disabled={!sqlText}>
-              Copy SQL
+              SQL 복사
             </button>
             <button
               className="ghost"
               onClick={handleDownloadAll}
               disabled={!items.length}
             >
-              Download All
+              mp3 전체 다운로드
             </button>
             <button
               className="primary"
               onClick={handleInsert}
-              disabled={!rows.length || isSending}
+              disabled={!sqlText.trim() || isSending}
             >
-              {isSending ? "Sending..." : "Send to Supabase"}
+              {isSending ? "전송 중..." : "Supabase로 전송"}
             </button>
           </div>
         </div>
@@ -530,21 +695,21 @@ function App() {
               <h3>{item.title}</h3>
               <dl>
                 <div>
-                  <dt>Date</dt>
+                  <dt>날짜</dt>
                   <dd>{item.date}</dd>
                 </div>
                 <div>
-                  <dt>Duration</dt>
+                  <dt>길이</dt>
                   <dd>{item.duration}</dd>
                 </div>
                 <div>
-                  <dt>Filename</dt>
+                  <dt>파일명</dt>
                   <dd>{item.filename}</dd>
                 </div>
               </dl>
               <div className="item-links">
                 <a href={item.audioUrl} target="_blank" rel="noreferrer">
-                  Source audio
+                  원본 오디오
                 </a>
                 <button
                   className="link-button"
@@ -553,11 +718,11 @@ function App() {
                   disabled={!item.audioUrl}
                 >
                   {downloadProgress[item.filename] != null
-                    ? `Download ${downloadProgress[item.filename]}%`
-                    : "Download"}
+                    ? `다운로드 ${downloadProgress[item.filename]}%`
+                    : "다운로드"}
                 </button>
                 <a href={item.r2Url} target="_blank" rel="noreferrer">
-                  R2 URL
+                  R2 주소
                 </a>
               </div>
               {downloadProgress[item.filename] != null && (
@@ -577,25 +742,121 @@ function App() {
             </article>
           ))}
           {!items.length && (
-            <div className="empty">Run a feed to see the parsed entries.</div>
+            <div className="empty">
+              피드를 실행하면 파싱된 항목이 표시됩니다.
+            </div>
           )}
         </div>
 
         <div className="sql-block">
           <div className="sql-header">
-            <h3>SQL Output</h3>
-            <span className="muted">Editable before copy</span>
+            <h3>SQL 출력</h3>
+            <div className="header-actions">
+              <button
+                className="ghost"
+                type="button"
+                onClick={() => {
+                  setSqlText(originalSqlText);
+                  setRows(originalRows);
+                }}
+                disabled={!originalSqlText}
+              >
+                원본으로 되돌리기
+              </button>
+              <span className="muted">복사 전 편집 가능</span>
+            </div>
           </div>
           <textarea
             value={sqlText}
             onChange={(event) => setSqlText(event.target.value)}
-            placeholder="SQL will appear here."
+            placeholder="SQL이 여기에 표시됩니다."
           />
           <p className="hint">
-            SQL edits do not affect the Supabase insert payload.
+            SQL 편집 내용이 Supabase 전송 데이터에 반영됩니다.
           </p>
         </div>
       </section>
+
+      {showAuthModal && (
+        <div
+          className="modal-backdrop"
+          onClick={() => {
+            setAuthError("");
+            setShowAuthModal(false);
+          }}
+        >
+          <div
+            className="modal-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3>Supabase 로그인</h3>
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() => {
+                  setAuthError("");
+                  setShowAuthModal(false);
+                }}
+                aria-label="닫기"
+              >
+                닫기
+              </button>
+            </div>
+            {authError && <div className="error auth-error">{authError}</div>}
+            {!authUserEmail ? (
+              <div className="modal-body">
+                <label className="field">
+                  <span>이메일</span>
+                  <input
+                    type="email"
+                    value={authEmail}
+                    onChange={(event) => setAuthEmail(event.target.value)}
+                    placeholder="you@example.com"
+                  />
+                </label>
+                <label className="field">
+                  <span>비밀번호</span>
+                  <input
+                    type="password"
+                    value={authPassword}
+                    onChange={(event) => setAuthPassword(event.target.value)}
+                    placeholder="비밀번호"
+                  />
+                </label>
+                <div className="modal-actions">
+                  <button
+                    className="primary"
+                    type="button"
+                    onClick={handleSignIn}
+                    disabled={isAuthBusy}
+                  >
+                    {isAuthBusy ? "로그인 중..." : "로그인"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="modal-body">
+                <p className="muted">로그인됨: {authUserEmail}</p>
+                <div className="modal-actions">
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={handleSignOut}
+                    disabled={isAuthBusy}
+                  >
+                    {isAuthBusy ? "로그아웃 중..." : "로그아웃"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {toastMessage && (
+        <div className={`toast ${toastTone}`}>{toastMessage}</div>
+      )}
     </div>
   );
 }
