@@ -65,6 +65,26 @@
   box-shadow: var(--panel-shadow);
 }
 
+.top-bar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.user-chip {
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  background: var(--surface);
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
 .form {
   display: grid;
   gap: 1.5rem;
@@ -260,6 +280,10 @@
   color: #742b2b;
 }
 
+.auth-error {
+  margin: 0;
+}
+
 .status {
   margin-top: 1rem;
   padding: 1rem 1.2rem;
@@ -294,6 +318,7 @@
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .items-grid {
@@ -433,6 +458,81 @@
   color: var(--ink-muted);
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 12, 12, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 20;
+}
+
+.modal-card {
+  width: min(420px, 100%);
+  background: var(--panel);
+  border-radius: 20px;
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--panel-shadow);
+  padding: 1.5rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.modal-header h3 {
+  margin: 0;
+}
+
+.modal-body {
+  display: grid;
+  gap: 1rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.icon-button {
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+}
+
+.toast {
+  position: fixed;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.85rem 1.2rem;
+  border-radius: 999px;
+  background: #102323;
+  color: #f7fbfa;
+  font-weight: 600;
+  box-shadow: 0 12px 30px rgba(16, 35, 35, 0.2);
+  z-index: 30;
+  animation: toastIn 0.2s ease-out;
+}
+
+.toast.success {
+  background: rgba(36, 92, 61, 0.95);
+}
+
+.toast.error {
+  background: rgba(116, 43, 43, 0.95);
+}
+
 @keyframes fadeInUp {
   from {
     opacity: 0;
@@ -441,6 +541,17 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
   }
 }
 
