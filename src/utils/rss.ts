@@ -9,6 +9,7 @@ export const parseRss = (
   limit: number,
   programId: number,
   language: string,
+  r2Folder: string = "de-episodes-audio/program",
 ) => {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xmlText, "text/xml");
@@ -53,7 +54,7 @@ export const parseRss = (
     };
   });
 
-  const items = buildItemsWithChannel(baseItems, channelTitle);
+  const items = buildItemsWithChannel(baseItems, channelTitle, r2Folder);
   const sqlText = buildSqlText(items, programId, language);
 
   return { channelTitle, items, sqlText };
@@ -85,7 +86,17 @@ export const parseProgramRss = (xmlText: string): ParsedProgram => {
   return { title, subtitle, imgUrl };
 };
 
-export const buildChannelR2Url = (channelTitle: string, filename: string) =>
-  `${BASE_URL}/${encodeURIComponent(channelTitle)}/${encodeURIComponent(
-    filename,
-  )}`;
+export const buildChannelR2Url = (
+  channelTitle: string,
+  filename: string,
+  r2Folder: string = "de-episodes-audio/program",
+) => {
+  const trimmedFolder = r2Folder.trim().replace(/^\/+|\/+$/g, "");
+  const folderPath = trimmedFolder
+    ? `${encodeURIComponent(trimmedFolder)}/`
+    : "";
+
+  return `${BASE_URL}/${folderPath}${encodeURIComponent(
+    channelTitle,
+  )}/${encodeURIComponent(filename)}`;
+};
