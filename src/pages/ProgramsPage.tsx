@@ -1,0 +1,413 @@
+import type { FormEvent } from "react";
+import { useState } from "react";
+import { DEFAULT_IMAGE_FOLDER, R2_IMAGE_BASE_URL } from "../config/constants";
+import { supabase } from "../lib/supabaseClient";
+import type { ParsedProgram, ToastTone } from "../types";
+import { buildR2ImageUrl, sanitizePathSegment } from "../utils/r2";
+import { parseProgramRss } from "../utils/rss";
+import { buildProgramSqlText, parseProgramSqlToRows } from "../utils/sql";
+
+type ProgramsPageProps = {
+  authUserEmail: string | null;
+  onRequireLogin: () => void;
+  showToast: (message: string, tone?: ToastTone) => void;
+};
+
+const ProgramsPage = ({
+  authUserEmail,
+  onRequireLogin,
+  showToast,
+}: ProgramsPageProps) => {
+  const [programRssUrl, setProgramRssUrl] = useState("");
+  const [programLanguage, setProgramLanguage] = useState("de");
+  const [programType, setProgramType] = useState("podcast");
+  const [programImageFolder, setProgramImageFolder] =
+    useState(DEFAULT_IMAGE_FOLDER);
+  const [programTitle, setProgramTitle] = useState("");
+  const [programSubtitle, setProgramSubtitle] = useState("");
+  const [programCategoryId, setProgramCategoryId] = useState<number | "">("");
+  const [programImgUrl, setProgramImgUrl] = useState("");
+  const [programSourceImgUrl, setProgramSourceImgUrl] = useState("");
+  const [programSqlText, setProgramSqlText] = useState("");
+  const [programOriginalSql, setProgramOriginalSql] = useState("");
+  const [programOriginal, setProgramOriginal] = useState<ParsedProgram | null>(
+    null,
+  );
+  const [programIsLoading, setProgramIsLoading] = useState(false);
+  const [programIsSending, setProgramIsSending] = useState(false);
+  const [programError, setProgramError] = useState("");
+  const [programStatus, setProgramStatus] = useState("");
+
+  const updateProgramSqlFromFields = () => {
+    const nextImgUrl = buildR2ImageUrl(
+      programTitle,
+      programSourceImgUrl || programImgUrl,
+      R2_IMAGE_BASE_URL,
+      programImageFolder,
+    );
+    setProgramImgUrl(nextImgUrl);
+    const nextProgram = {
+      title: programTitle.trim() || "제목 없음",
+      subtitle: programSubtitle.trim(),
+      imgUrl: nextImgUrl,
+    };
+    setProgramSqlText(
+      buildProgramSqlText(
+        nextProgram,
+        programType,
+        programLanguage,
+        programCategoryId || undefined,
+      ),
+    );
+  };
+
+  const handleProgramSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setProgramError("");
+    setProgramStatus("");
+    setProgramIsLoading(true);
+
+    try {
+      const response = await fetch(
+        `/api/rss?url=${encodeURIComponent(programRssUrl)}`,
+      );
+      if (!response.ok) {
+        throw new Error(`요청 실패: 상태 코드 ${response.status}.`);
+      }
+      const xmlText = await response.text();
+      const parsed = parseProgramRss(xmlText);
+      setProgramTitle(parsed.title);
+      setProgramSubtitle(parsed.subtitle);
+      setProgramSourceImgUrl(parsed.imgUrl);
+      setProgramImageFolder(DEFAULT_IMAGE_FOLDER);
+      const nextImgUrl = buildR2ImageUrl(
+        parsed.title,
+        parsed.imgUrl,
+        R2_IMAGE_BASE_URL,
+        DEFAULT_IMAGE_FOLDER,
+      );
+      setProgramImgUrl(nextImgUrl);
+      setProgramOriginal(parsed);
+      const sql = buildProgramSqlText(
+        { ...parsed, imgUrl: nextImgUrl },
+        programType,
+        programLanguage,
+        programCategoryId || undefined,
+      );
+      setProgramSqlText(sql);
+      setProgramOriginalSql(sql);
+      setProgramStatus("프로그램 정보를 불러왔습니다.");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "알 수 없는 오류입니다.";
+      setProgramError(message);
+      setProgramTitle("");
+      setProgramSubtitle("");
+      setProgramCategoryId("");
+      setProgramImgUrl("");
+      setProgramSourceImgUrl("");
+      setProgramImageFolder(DEFAULT_IMAGE_FOLDER);
+      setProgramSqlText("");
+      setProgramOriginalSql("");
+      setProgramOriginal(null);
+    } finally {
+      setProgramIsLoading(false);
+    }
+  };
+
+  const handleProgramInsert = async () => {
+    if (!authUserEmail) {
+      showToast("로그인 후 전송할 수 있습니다.", "error");
+      onRequireLogin();
+      return;
+    }
+    if (!programSqlText.trim()) return;
+    setProgramError("");
+    setProgramStatus("");
+    setProgramIsSending(true);
+
+    try {
+      const rowsToInsert = parseProgramSqlToRows(programSqlText);
+      const { error: insertError } = await supabase
+        .from("programs")
+        .insert(rowsToInsert);
+      if (insertError) {
+        throw insertError;
+      }
+      setProgramStatus(`프로그램 ${rowsToInsert.length}개를 추가했습니다.`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "추가 실패.";
+      setProgramError(message);
+    } finally {
+      setProgramIsSending(false);
+    }
+  };
+
+  const handleProgramReset = () => {
+    if (!programOriginal) return;
+    setProgramTitle(programOriginal.title);
+    setProgramSubtitle(programOriginal.subtitle);
+    setProgramCategoryId("");
+    setProgramSourceImgUrl(programOriginal.imgUrl);
+    setProgramImageFolder(DEFAULT_IMAGE_FOLDER);
+    const resetImgUrl = buildR2ImageUrl(
+      programOriginal.title,
+      programOriginal.imgUrl,
+      R2_IMAGE_BASE_URL,
+      DEFAULT_IMAGE_FOLDER,
+    );
+    setProgramImgUrl(resetImgUrl);
+    setProgramSqlText(programOriginalSql);
+  };
+
+  const downloadImage = async (url: string) => {
+    if (!url) return;
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`다운로드 실패: 상태 코드 ${response.status}.`);
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      const fallbackName = "channel-image";
+      const urlName = url.split("/").pop()?.split("?")[0] || fallbackName;
+      const extCandidate = urlName.split(".").pop() || "webp";
+      const safeTitle = sanitizePathSegment(programTitle) || fallbackName;
+      const filename = safeTitle ? `${safeTitle}.${extCandidate}` : urlName;
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "다운로드 실패.";
+      showToast(message, "error");
+    }
+  };
+
+  const applyR2ImageUrl = () => {
+    updateProgramSqlFromFields();
+  };
+
+  return (
+    <>
+      <header className="hero">
+        <div>
+          <p className="eyebrow">RSS → SQL + Supabase</p>
+          <h1>Program Builder</h1>
+          <p className="subhead">
+            RSS에서 채널 정보를 가져와 programs 테이블에 추가합니다.
+          </p>
+        </div>
+        <div className="hero-card">
+          <div className="metric">
+            <span className="metric-label">Storage</span>
+            <strong className="metric-value">R2 public URLs</strong>
+          </div>
+          <div className="metric">
+            <span className="metric-label">Mode</span>
+            <strong className="metric-value">Client Only</strong>
+          </div>
+        </div>
+      </header>
+
+      <section className="panel">
+        <form className="form" onSubmit={handleProgramSubmit}>
+          <label className="field">
+            <span>RSS URL</span>
+            <input
+              type="url"
+              value={programRssUrl}
+              onChange={(event) => setProgramRssUrl(event.target.value)}
+              placeholder="https://example.com/feed.rss"
+              required
+            />
+          </label>
+          <div className="field-row">
+            <label className="field">
+              <span>Type</span>
+              <input
+                type="text"
+                value={programType}
+                onChange={(event) => setProgramType(event.target.value)}
+                placeholder="podcast"
+              />
+            </label>
+            <label className="field">
+              <span>Language</span>
+              <input
+                type="text"
+                value={programLanguage}
+                onChange={(event) => setProgramLanguage(event.target.value)}
+                placeholder="de"
+                maxLength={5}
+              />
+            </label>
+            <label className="field">
+              <span>카테고리 ID</span>
+              <input
+                type="number"
+                value={programCategoryId}
+                onChange={(event) =>
+                  setProgramCategoryId(
+                    event.target.value ? Number(event.target.value) : "",
+                  )
+                }
+                placeholder="선택사항"
+              />
+            </label>
+          </div>
+          <div className="actions">
+            <button
+              className="primary"
+              type="submit"
+              disabled={programIsLoading}
+            >
+              {programIsLoading ? "처리 중..." : "프로그램 불러오기"}
+            </button>
+            <button
+              className="ghost"
+              type="button"
+              onClick={() => {
+                setProgramRssUrl("");
+                setProgramType("podcast");
+                setProgramLanguage("de");
+                setProgramImageFolder(DEFAULT_IMAGE_FOLDER);
+                setProgramTitle("");
+                setProgramSubtitle("");
+                setProgramCategoryId("");
+                setProgramImgUrl("");
+                setProgramSourceImgUrl("");
+                setProgramSqlText("");
+                setProgramOriginalSql("");
+                setProgramOriginal(null);
+                setProgramError("");
+                setProgramStatus("");
+              }}
+            >
+              초기화
+            </button>
+          </div>
+        </form>
+        {programError && <div className="error">{programError}</div>}
+        {programStatus && <div className="status">{programStatus}</div>}
+      </section>
+
+      <section className="panel results">
+        <div className="panel-header">
+          <div>
+            <h2>프로그램 정보</h2>
+            <p className="muted">RSS 채널 메타데이터</p>
+          </div>
+          <div className="header-actions">
+            <button
+              className="ghost"
+              type="button"
+              onClick={updateProgramSqlFromFields}
+              disabled={!programTitle}
+            >
+              SQL 갱신
+            </button>
+            <button
+              className="ghost"
+              type="button"
+              onClick={handleProgramReset}
+              disabled={!programOriginal}
+            >
+              원래대로
+            </button>
+            <button
+              className="primary"
+              onClick={handleProgramInsert}
+              disabled={!programSqlText.trim() || programIsSending}
+            >
+              {programIsSending ? "전송 중..." : "Supabase로 전송"}
+            </button>
+          </div>
+        </div>
+
+        <div className="program-grid">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "1rem",
+            }}
+          >
+            <label className="field">
+              <span>제목</span>
+              <input
+                type="text"
+                value={programTitle}
+                onChange={(event) => setProgramTitle(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>부제</span>
+              <input
+                type="text"
+                value={programSubtitle}
+                onChange={(event) => setProgramSubtitle(event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="field readonly span-2">
+            <span>원본 이미지 URL</span>
+            <span className="readonly-value">{programSourceImgUrl || "-"}</span>
+          </div>
+          <label className="field">
+            <span>R2 폴더</span>
+            <input
+              type="text"
+              value={programImageFolder}
+              onChange={(event) => setProgramImageFolder(event.target.value)}
+              placeholder="de_images/program"
+            />
+          </label>
+          <div className="program-actions span-2">
+            <button
+              className="ghost"
+              type="button"
+              onClick={() => downloadImage(programSourceImgUrl)}
+              disabled={!programSourceImgUrl}
+            >
+              이미지 다운로드
+            </button>
+            <button
+              className="ghost"
+              type="button"
+              onClick={applyR2ImageUrl}
+              disabled={!programTitle}
+            >
+              변경 반영
+            </button>
+            {programSourceImgUrl && (
+              <a href={programSourceImgUrl} target="_blank" rel="noreferrer">
+                원본 보기
+              </a>
+            )}
+          </div>
+        </div>
+
+        <div className="sql-block">
+          <div className="sql-header">
+            <h3>SQL 출력</h3>
+            <span className="muted">복사 전 편집 가능</span>
+          </div>
+          <textarea
+            value={programSqlText}
+            onChange={(event) => setProgramSqlText(event.target.value)}
+            placeholder="SQL이 여기에 표시됩니다."
+          />
+          <p className="hint">
+            SQL 편집 내용이 Supabase 전송 데이터에 반영됩니다.
+          </p>
+        </div>
+      </section>
+    </>
+  );
+};
+
+export default ProgramsPage;
