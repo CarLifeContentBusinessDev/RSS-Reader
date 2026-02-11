@@ -1,10 +1,13 @@
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import "./App.css";
-import { supabase } from "./supabaseClient";
+import { supabase } from "./lib/supabaseClient";
 
 const BASE_URL =
   "https://pub-a45bc992c0594356a8d32a71510a246b.r2.dev/de-episodes-audio/program";
+const R2_IMAGE_BASE_URL = "https://pub-a45bc992c0594356a8d32a71510a246b.r2.dev";
+const DEFAULT_IMAGE_FOLDER = "de_images/program";
 const ITUNES_NS = "http://www.itunes.com/dtds/podcast-1.0.dtd";
 
 type EpisodeRow = {
@@ -16,6 +19,14 @@ type EpisodeRow = {
   language: string[];
 };
 
+type ProgramRow = {
+  title: string;
+  subtitle: string;
+  img_url: string;
+  type: string;
+  language: string[];
+};
+
 type ParsedItem = {
   title: string;
   audioUrl: string;
@@ -23,6 +34,12 @@ type ParsedItem = {
   duration: string;
   filename: string;
   r2Url: string;
+};
+
+type ParsedProgram = {
+  title: string;
+  subtitle: string;
+  imgUrl: string;
 };
 
 type LogTone = "info" | "success" | "error" | "action";
@@ -55,6 +72,29 @@ const parseSqlToRows = (sqlText: string): EpisodeRow[] => {
 
   if (!rows.length) {
     throw new Error("SQL에서 삽입할 항목을 찾지 못했습니다.");
+  }
+
+  return rows;
+};
+
+const parseProgramSqlToRows = (sqlText: string): ProgramRow[] => {
+  const rowPattern =
+    /\(\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*ARRAY\[\s*'((?:''|[^'])*)'\s*\]\s*\)/g;
+  const rows: ProgramRow[] = [];
+
+  for (const match of sqlText.matchAll(rowPattern)) {
+    const [, titleRaw, subtitleRaw, imgRaw, typeRaw, language] = match;
+    rows.push({
+      title: titleRaw.replace(/''/g, "'"),
+      subtitle: subtitleRaw.replace(/''/g, "'"),
+      img_url: imgRaw.replace(/''/g, "'"),
+      type: typeRaw.replace(/''/g, "'"),
+      language: [language.replace(/''/g, "'")],
+    });
+  }
+
+  if (!rows.length) {
+    throw new Error("SQL에서 삽입할 프로그램을 찾지 못했습니다.");
   }
 
   return rows;
@@ -166,6 +206,32 @@ const parseRss = (
   return { channelTitle, items, sqlText };
 };
 
+const parseProgramRss = (xmlText: string): ParsedProgram => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xmlText, "text/xml");
+  const parseError = doc.querySelector("parsererror");
+
+  if (parseError) {
+    throw new Error("유효하지 않은 XML 응답입니다.");
+  }
+
+  const title =
+    doc.querySelector("channel > title")?.textContent?.trim() || "제목 없음";
+  const subtitleNode = doc.getElementsByTagNameNS(ITUNES_NS, "subtitle")[0];
+  const subtitle =
+    subtitleNode?.textContent?.trim() ||
+    doc.querySelector("channel > description")?.textContent?.trim() ||
+    "";
+
+  const itunesImage = doc.getElementsByTagNameNS(ITUNES_NS, "image")[0];
+  const imgUrl =
+    itunesImage?.getAttribute("href") ||
+    doc.querySelector("channel > image > url")?.textContent?.trim() ||
+    "";
+
+  return { title, subtitle, imgUrl };
+};
+
 const buildSqlText = (
   items: ParsedItem[],
   programId: number,
@@ -194,11 +260,68 @@ const buildItemsWithChannel = (baseItems: ParsedItem[], channelTitle: string) =>
     return { ...item, filename, r2Url };
   });
 
+const buildProgramSqlText = (
+  program: ParsedProgram,
+  programType: string,
+  language: string,
+) => {
+  const safeTitle = program.title.replace(/'/g, "''");
+  const safeSubtitle = program.subtitle.replace(/'/g, "''");
+  const safeImgUrl = program.imgUrl.replace(/'/g, "''");
+  const safeType = programType.replace(/'/g, "''");
+
+  return `INSERT INTO programs\n  (title, subtitle, img_url, type, language)\nVALUES\n('${safeTitle}', '${safeSubtitle}', '${safeImgUrl}', '${safeType}', ARRAY['${language}']);`;
+};
+
+const sanitizePathSegment = (value: string) =>
+  value.replace(/[\\/*?:"<>|]/g, "").trim();
+
+const buildR2ImageUrl = (
+  title: string,
+  sourceUrl: string,
+  baseUrl: string,
+  folder: string,
+) => {
+  const trimmedBase = baseUrl.replace(/\/+$/g, "");
+  const trimmedFolder = folder.trim().replace(/^\/+|\/+$/g, "");
+  const safeTitle = sanitizePathSegment(title) || "program";
+  const extCandidate = sourceUrl.split(".").pop()?.split("?")[0] || "webp";
+  const ext = extCandidate.length > 5 ? "webp" : extCandidate || "webp";
+  const filename = `${safeTitle}.${ext}`;
+  const encodedFile = encodeURIComponent(filename);
+
+  if (!trimmedFolder) {
+    return `${trimmedBase}/${encodedFile}`;
+  }
+
+  return `${trimmedBase}/${encodeURIComponent(trimmedFolder)}/${encodedFile}`;
+};
+
 function App() {
+  const location = useLocation();
+  const isProgramsPage = location.pathname === "/programs";
   const [rssUrl, setRssUrl] = useState("");
   const [programId, setProgramId] = useState("");
   const [language, setLanguage] = useState("de");
   const [limit, setLimit] = useState("4");
+  const [programRssUrl, setProgramRssUrl] = useState("");
+  const [programLanguage, setProgramLanguage] = useState("de");
+  const [programType, setProgramType] = useState("podcast");
+  const [programImageFolder, setProgramImageFolder] =
+    useState(DEFAULT_IMAGE_FOLDER);
+  const [programTitle, setProgramTitle] = useState("");
+  const [programSubtitle, setProgramSubtitle] = useState("");
+  const [programImgUrl, setProgramImgUrl] = useState("");
+  const [programSourceImgUrl, setProgramSourceImgUrl] = useState("");
+  const [programSqlText, setProgramSqlText] = useState("");
+  const [programOriginalSql, setProgramOriginalSql] = useState("");
+  const [programOriginal, setProgramOriginal] = useState<ParsedProgram | null>(
+    null,
+  );
+  const [programIsLoading, setProgramIsLoading] = useState(false);
+  const [programIsSending, setProgramIsSending] = useState(false);
+  const [programError, setProgramError] = useState("");
+  const [programStatus, setProgramStatus] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authUserEmail, setAuthUserEmail] = useState<string | null>(null);
@@ -461,6 +584,152 @@ function App() {
     }
   };
 
+  const updateProgramSqlFromFields = () => {
+    const nextImgUrl = buildR2ImageUrl(
+      programTitle,
+      programSourceImgUrl || programImgUrl,
+      R2_IMAGE_BASE_URL,
+      programImageFolder,
+    );
+    setProgramImgUrl(nextImgUrl);
+    const nextProgram = {
+      title: programTitle.trim() || "제목 없음",
+      subtitle: programSubtitle.trim(),
+      imgUrl: nextImgUrl,
+    };
+    setProgramSqlText(
+      buildProgramSqlText(nextProgram, programType, programLanguage),
+    );
+  };
+
+  const handleProgramSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setProgramError("");
+    setProgramStatus("");
+    setProgramIsLoading(true);
+
+    try {
+      const response = await fetch(
+        `/api/rss?url=${encodeURIComponent(programRssUrl)}`,
+      );
+      if (!response.ok) {
+        throw new Error(`요청 실패: 상태 코드 ${response.status}.`);
+      }
+      const xmlText = await response.text();
+      const parsed = parseProgramRss(xmlText);
+      setProgramTitle(parsed.title);
+      setProgramSubtitle(parsed.subtitle);
+      setProgramSourceImgUrl(parsed.imgUrl);
+      setProgramImageFolder(DEFAULT_IMAGE_FOLDER);
+      const nextImgUrl = buildR2ImageUrl(
+        parsed.title,
+        parsed.imgUrl,
+        R2_IMAGE_BASE_URL,
+        DEFAULT_IMAGE_FOLDER,
+      );
+      setProgramImgUrl(nextImgUrl);
+      setProgramOriginal(parsed);
+      const sql = buildProgramSqlText(
+        { ...parsed, imgUrl: nextImgUrl },
+        programType,
+        programLanguage,
+      );
+      setProgramSqlText(sql);
+      setProgramOriginalSql(sql);
+      setProgramStatus("프로그램 정보를 불러왔습니다.");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "알 수 없는 오류입니다.";
+      setProgramError(message);
+      setProgramTitle("");
+      setProgramSubtitle("");
+      setProgramImgUrl("");
+      setProgramSourceImgUrl("");
+      setProgramImageFolder(DEFAULT_IMAGE_FOLDER);
+      setProgramSqlText("");
+      setProgramOriginalSql("");
+      setProgramOriginal(null);
+    } finally {
+      setProgramIsLoading(false);
+    }
+  };
+
+  const handleProgramInsert = async () => {
+    if (!authUserEmail) {
+      showToast("로그인 후 전송할 수 있습니다.", "error");
+      setShowAuthModal(true);
+      return;
+    }
+    if (!programSqlText.trim()) return;
+    setProgramError("");
+    setProgramStatus("");
+    setProgramIsSending(true);
+
+    try {
+      const rowsToInsert = parseProgramSqlToRows(programSqlText);
+      const { error: insertError } = await supabase
+        .from("programs")
+        .insert(rowsToInsert);
+      if (insertError) {
+        throw insertError;
+      }
+      setProgramStatus(`프로그램 ${rowsToInsert.length}개를 추가했습니다.`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "추가 실패.";
+      setProgramError(message);
+    } finally {
+      setProgramIsSending(false);
+    }
+  };
+
+  const handleProgramReset = () => {
+    if (!programOriginal) return;
+    setProgramTitle(programOriginal.title);
+    setProgramSubtitle(programOriginal.subtitle);
+    setProgramSourceImgUrl(programOriginal.imgUrl);
+    setProgramImageFolder(DEFAULT_IMAGE_FOLDER);
+    const resetImgUrl = buildR2ImageUrl(
+      programOriginal.title,
+      programOriginal.imgUrl,
+      R2_IMAGE_BASE_URL,
+      DEFAULT_IMAGE_FOLDER,
+    );
+    setProgramImgUrl(resetImgUrl);
+    setProgramSqlText(programOriginalSql);
+  };
+
+  const downloadImage = async (url: string) => {
+    if (!url) return;
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`다운로드 실패: 상태 코드 ${response.status}.`);
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      const fallbackName = "channel-image";
+      const urlName = url.split("/").pop()?.split("?")[0] || fallbackName;
+      const extCandidate = urlName.split(".").pop() || "webp";
+      const safeTitle =
+        sanitizePathSegment(programTitle) || sanitizePathSegment(channelTitle);
+      const filename = safeTitle ? `${safeTitle}.${extCandidate}` : urlName;
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "다운로드 실패.";
+      showToast(message, "error");
+    }
+  };
+
+  const applyR2ImageUrl = () => {
+    updateProgramSqlFromFields();
+  };
+
   const downloadFile = async (url: string, filename: string) => {
     try {
       setProcess("다운로드 중", "working");
@@ -555,399 +824,649 @@ function App() {
   };
 
   return (
-    <div className="app">
-      <div className="top-bar">
-        <div className="top-actions">
-          {authUserEmail ? (
-            <>
-              <span className="user-chip">{authUserEmail}</span>
-              <button
-                className="ghost"
-                type="button"
-                onClick={handleSignOut}
-                disabled={isAuthBusy}
-              >
-                {isAuthBusy ? "로그아웃 중..." : "로그아웃"}
-              </button>
-            </>
-          ) : (
-            <button
-              className="primary"
-              type="button"
-              onClick={() => {
-                setAuthError("");
-                setShowAuthModal(true);
-              }}
-            >
-              로그인
-            </button>
-          )}
+    <div className="shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <span className="eyebrow">RSS → SQL</span>
+          <strong>Builder</strong>
         </div>
-      </div>
-      <header className="hero">
-        <div>
-          <p className="eyebrow">RSS → SQL + Supabase</p>
-          <h1>RSS Episode Builder</h1>
-          <p className="subhead">
-            RSS 주소를 넣고 프로그램과 언어를 고르면 SQL을 만들거나 Supabase로
-            바로 전송할 수 있습니다.
-          </p>
-        </div>
-        <div className="hero-card">
-          <div className="metric">
-            <span className="metric-label">Storage</span>
-            <strong className="metric-value">R2 public URLs</strong>
-          </div>
-          <div className="metric">
-            <span className="metric-label">Mode</span>
-            <strong className="metric-value">Client-only</strong>
-          </div>
-        </div>
-      </header>
-
-      <section className="panel">
-        <form className="form" onSubmit={handleSubmit}>
-          <label className="field">
-            <span>RSS URL</span>
-            <input
-              type="url"
-              value={rssUrl}
-              onChange={(event) => setRssUrl(event.target.value)}
-              placeholder="https://example.com/feed.rss"
-              required
-            />
-          </label>
-          <div className="field-row">
-            <label className="field">
-              <span>Program ID</span>
-              <input
-                type="number"
-                value={programId}
-                onChange={(event) => setProgramId(event.target.value)}
-                placeholder="000"
-                min={0}
-              />
-            </label>
-            <label className="field">
-              <span>Language</span>
-              <input
-                type="text"
-                value={language}
-                onChange={(event) => setLanguage(event.target.value)}
-                placeholder="de"
-                maxLength={5}
-              />
-            </label>
-            <label className="field">
-              <span>Limit</span>
-              <input
-                type="number"
-                value={limit}
-                onChange={(event) => setLimit(event.target.value)}
-                min={1}
-                max={50}
-              />
-            </label>
-          </div>
-          <div className="actions">
-            <button className="primary" type="submit" disabled={isLoading}>
-              {isLoading ? "처리 중..." : "SQL 생성"}
-            </button>
-            <button
-              className="ghost"
-              type="button"
-              onClick={() => {
-                setRssUrl("");
-                setProgramId("0");
-                setLanguage("");
-                setLimit("4");
-                setChannelTitle("");
-                setChannelOverride("");
-                setIsEditingChannel(false);
-                setItems([]);
-                setSqlText("");
-                setOriginalItems([]);
-                setOriginalChannelTitle("");
-                setError("");
-                setStatus("");
-              }}
-            >
-              초기화
-            </button>
-          </div>
-        </form>
-        <div className="log-panel">
-          <div className="log-header">
-            <h3>처리 로그</h3>
-            <span className="muted">진행 요약</span>
-            <span className={`status-pill ${processState.tone}`}>
-              {processState.label}
-            </span>
-          </div>
-          <div className="log-body" aria-live="polite">
-            <div className="log-list">
-              {logs.length ? (
-                logs.map((entry) => (
-                  <div key={entry.id} className={`log-item ${entry.tone}`}>
-                    <span className="log-dot" />
-                    <p>{entry.message}</p>
-                  </div>
-                ))
-              ) : (
-                <p className="muted">아직 실행 로그가 없습니다.</p>
-              )}
-            </div>
-          </div>
-        </div>
-        {error && <div className="error">{error}</div>}
-        {status && <div className="status">{status}</div>}
-      </section>
-
-      <section className="panel results">
-        <div className="panel-header">
-          <div>
-            <h2>파싱된 항목</h2>
-            <div className="channel-editor">
-              <div className="channel-row">
-                <span className="channel-prefix">채널 : </span>
-                {!isEditingChannel ? (
-                  <span className="channel-value">
-                    {channelTitle || "아직 불러온 피드가 없습니다."}
-                  </span>
-                ) : (
-                  <input
-                    className="channel-input"
-                    type="text"
-                    value={channelOverride}
-                    onChange={(event) => setChannelOverride(event.target.value)}
-                    placeholder="예: Eine Stunde History"
-                    disabled={!items.length}
-                  />
-                )}
-              </div>
-              <div className="channel-actions">
-                <button
-                  className="text-button"
-                  type="button"
-                  onClick={() => setIsEditingChannel((prev) => !prev)}
-                  disabled={!items.length}
-                >
-                  {isEditingChannel ? "수정 취소" : "편집"}
-                </button>
-                {isEditingChannel && (
-                  <button
-                    className="text-button"
-                    type="button"
-                    onClick={applyChannelOverride}
-                    disabled={!items.length}
-                  >
-                    일괄 적용
-                  </button>
-                )}
-                <button
-                  className="text-button"
-                  type="button"
-                  onClick={resetChannelOverride}
-                  disabled={!originalItems.length}
-                >
-                  원래대로
-                </button>
-              </div>
-            </div>
-          </div>
-          {downloadSummary.total > 0 && (
-            <div className="download-summary">
-              다운로드 {downloadSummary.completed}/{downloadSummary.total}
-            </div>
-          )}
-          <div className="header-actions">
-            <button className="ghost" onClick={handleCopy} disabled={!sqlText}>
-              SQL 복사
-            </button>
-            <button
-              className="ghost"
-              onClick={handleDownloadAll}
-              disabled={!items.length}
-            >
-              mp3 전체 다운로드
-            </button>
-            <button
-              className="primary"
-              onClick={handleInsert}
-              disabled={!sqlText.trim() || isSending}
-            >
-              {isSending ? "전송 중..." : "Supabase로 전송"}
-            </button>
-          </div>
-        </div>
-
-        <div className="items-grid">
-          {items.map((item) => (
-            <article key={item.filename} className="item-card">
-              <h3>{item.title}</h3>
-              <dl>
-                <div>
-                  <dt>날짜</dt>
-                  <dd>{item.date}</dd>
-                </div>
-                <div>
-                  <dt>길이</dt>
-                  <dd>{item.duration}</dd>
-                </div>
-                <div>
-                  <dt>파일명</dt>
-                  <dd>{item.filename}</dd>
-                </div>
-              </dl>
-              <div className="item-links">
-                <a href={item.audioUrl} target="_blank" rel="noreferrer">
-                  원본 오디오
-                </a>
-                <button
-                  className="link-button"
-                  type="button"
-                  onClick={() => downloadFile(item.audioUrl, item.filename)}
-                  disabled={!item.audioUrl}
-                >
-                  {downloadProgress[item.filename] != null
-                    ? `다운로드 ${downloadProgress[item.filename]}%`
-                    : "다운로드"}
-                </button>
-                <a href={item.r2Url} target="_blank" rel="noreferrer">
-                  R2 주소
-                </a>
-              </div>
-              {downloadProgress[item.filename] != null && (
-                <div className="download-progress">
-                  <div className="progress-bar">
-                    <span
-                      style={{
-                        width: `${downloadProgress[item.filename]}%`,
-                      }}
-                    />
-                  </div>
-                  <span className="progress-text">
-                    {downloadProgress[item.filename]}%
-                  </span>
-                </div>
-              )}
-            </article>
-          ))}
-          {!items.length && (
-            <div className="empty">
-              피드를 실행하면 파싱된 항목이 표시됩니다.
-            </div>
-          )}
-        </div>
-
-        <div className="sql-block">
-          <div className="sql-header">
-            <h3>SQL 출력</h3>
-            <div className="header-actions">
-              <button
-                className="ghost"
-                type="button"
-                onClick={() => {
-                  setSqlText(originalSqlText);
-                }}
-                disabled={!originalSqlText}
-              >
-                원본으로 되돌리기
-              </button>
-              <span className="muted">복사 전 편집 가능</span>
-            </div>
-          </div>
-          <textarea
-            value={sqlText}
-            onChange={(event) => setSqlText(event.target.value)}
-            placeholder="SQL이 여기에 표시됩니다."
-          />
-          <p className="hint">
-            SQL 편집 내용이 Supabase 전송 데이터에 반영됩니다.
-          </p>
-        </div>
-      </section>
-
-      {showAuthModal && (
-        <div
-          className="modal-backdrop"
-          onClick={() => {
-            setAuthError("");
-            setShowAuthModal(false);
-          }}
-        >
-          <div
-            className="modal-card"
-            onClick={(event) => event.stopPropagation()}
+        <nav className="sidebar-nav">
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
           >
-            <div className="modal-header">
-              <h3>Supabase 로그인</h3>
+            에피소드
+          </NavLink>
+          <NavLink
+            to="/programs"
+            className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
+          >
+            프로그램
+          </NavLink>
+        </nav>
+      </aside>
+
+      <main className="app">
+        <div className="top-bar">
+          <div className="top-actions">
+            {authUserEmail ? (
+              <>
+                <span className="user-chip">{authUserEmail}</span>
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={handleSignOut}
+                  disabled={isAuthBusy}
+                >
+                  {isAuthBusy ? "로그아웃 중..." : "로그아웃"}
+                </button>
+              </>
+            ) : (
               <button
-                className="icon-button"
+                className="primary"
                 type="button"
                 onClick={() => {
                   setAuthError("");
-                  setShowAuthModal(false);
+                  setShowAuthModal(true);
                 }}
-                aria-label="닫기"
               >
-                닫기
+                로그인
               </button>
-            </div>
-            {authError && <div className="error auth-error">{authError}</div>}
-            {!authUserEmail ? (
-              <div className="modal-body">
-                <label className="field">
-                  <span>이메일</span>
-                  <input
-                    type="email"
-                    value={authEmail}
-                    onChange={(event) => setAuthEmail(event.target.value)}
-                    placeholder="you@example.com"
-                  />
-                </label>
-                <label className="field">
-                  <span>비밀번호</span>
-                  <input
-                    type="password"
-                    value={authPassword}
-                    onChange={(event) => setAuthPassword(event.target.value)}
-                    placeholder="비밀번호"
-                  />
-                </label>
-                <div className="modal-actions">
-                  <button
-                    className="primary"
-                    type="button"
-                    onClick={handleSignIn}
-                    disabled={isAuthBusy}
-                  >
-                    {isAuthBusy ? "로그인 중..." : "로그인"}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="modal-body">
-                <p className="muted">로그인됨: {authUserEmail}</p>
-                <div className="modal-actions">
-                  <button
-                    className="ghost"
-                    type="button"
-                    onClick={handleSignOut}
-                    disabled={isAuthBusy}
-                  >
-                    {isAuthBusy ? "로그아웃 중..." : "로그아웃"}
-                  </button>
-                </div>
-              </div>
             )}
           </div>
         </div>
-      )}
 
-      {toastMessage && (
-        <div className={`toast ${toastTone}`}>{toastMessage}</div>
-      )}
+        {!isProgramsPage && (
+          <>
+            <header className="hero">
+              <div>
+                <p className="eyebrow">RSS → SQL + Supabase</p>
+                <h1>RSS Episode Builder</h1>
+                <p className="subhead">
+                  RSS 주소를 넣고 프로그램과 언어를 고르면 SQL을 만들거나
+                  Supabase로 바로 전송할 수 있습니다.
+                </p>
+              </div>
+              <div className="hero-card">
+                <div className="metric">
+                  <span className="metric-label">Storage</span>
+                  <strong className="metric-value">R2 public URLs</strong>
+                </div>
+                <div className="metric">
+                  <span className="metric-label">Mode</span>
+                  <strong className="metric-value">Client-only</strong>
+                </div>
+              </div>
+            </header>
+
+            <section className="panel">
+              <form className="form" onSubmit={handleSubmit}>
+                <label className="field">
+                  <span>RSS URL</span>
+                  <input
+                    type="url"
+                    value={rssUrl}
+                    onChange={(event) => setRssUrl(event.target.value)}
+                    placeholder="https://example.com/feed.rss"
+                    required
+                  />
+                </label>
+                <div className="field-row">
+                  <label className="field">
+                    <span>Program ID</span>
+                    <input
+                      type="number"
+                      value={programId}
+                      onChange={(event) => setProgramId(event.target.value)}
+                      placeholder="000"
+                      min={0}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Language</span>
+                    <input
+                      type="text"
+                      value={language}
+                      onChange={(event) => setLanguage(event.target.value)}
+                      placeholder="de"
+                      maxLength={5}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Limit</span>
+                    <input
+                      type="number"
+                      value={limit}
+                      onChange={(event) => setLimit(event.target.value)}
+                      min={1}
+                      max={50}
+                    />
+                  </label>
+                </div>
+                <div className="actions">
+                  <button
+                    className="primary"
+                    type="submit"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? "처리 중..." : "SQL 생성"}
+                  </button>
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => {
+                      setRssUrl("");
+                      setProgramId("0");
+                      setLanguage("");
+                      setLimit("4");
+                      setChannelTitle("");
+                      setChannelOverride("");
+                      setIsEditingChannel(false);
+                      setItems([]);
+                      setSqlText("");
+                      setOriginalItems([]);
+                      setOriginalChannelTitle("");
+                      setError("");
+                      setStatus("");
+                    }}
+                  >
+                    초기화
+                  </button>
+                </div>
+              </form>
+              <div className="log-panel">
+                <div className="log-header">
+                  <h3>처리 로그</h3>
+                  <span className="muted">진행 요약</span>
+                  <span className={`status-pill ${processState.tone}`}>
+                    {processState.label}
+                  </span>
+                </div>
+                <div className="log-body" aria-live="polite">
+                  <div className="log-list">
+                    {logs.length ? (
+                      logs.map((entry) => (
+                        <div
+                          key={entry.id}
+                          className={`log-item ${entry.tone}`}
+                        >
+                          <span className="log-dot" />
+                          <p>{entry.message}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="muted">아직 실행 로그가 없습니다.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {error && <div className="error">{error}</div>}
+              {status && <div className="status">{status}</div>}
+            </section>
+
+            <section className="panel results">
+              <div className="panel-header">
+                <div>
+                  <h2>파싱된 항목</h2>
+                  <div className="channel-editor">
+                    <div className="channel-row">
+                      <span className="channel-prefix">채널 : </span>
+                      {!isEditingChannel ? (
+                        <span className="channel-value">
+                          {channelTitle || "아직 불러온 피드가 없습니다."}
+                        </span>
+                      ) : (
+                        <input
+                          className="channel-input"
+                          type="text"
+                          value={channelOverride}
+                          onChange={(event) =>
+                            setChannelOverride(event.target.value)
+                          }
+                          placeholder="예: Eine Stunde History"
+                          disabled={!items.length}
+                        />
+                      )}
+                    </div>
+                    <div className="channel-actions">
+                      <button
+                        className="text-button"
+                        type="button"
+                        onClick={() => setIsEditingChannel((prev) => !prev)}
+                        disabled={!items.length}
+                      >
+                        {isEditingChannel ? "수정 취소" : "편집"}
+                      </button>
+                      {isEditingChannel && (
+                        <button
+                          className="text-button"
+                          type="button"
+                          onClick={applyChannelOverride}
+                          disabled={!items.length}
+                        >
+                          일괄 적용
+                        </button>
+                      )}
+                      <button
+                        className="text-button"
+                        type="button"
+                        onClick={resetChannelOverride}
+                        disabled={!originalItems.length}
+                      >
+                        원래대로
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                {downloadSummary.total > 0 && (
+                  <div className="download-summary">
+                    다운로드 {downloadSummary.completed}/{downloadSummary.total}
+                  </div>
+                )}
+                <div className="header-actions">
+                  <button
+                    className="ghost"
+                    onClick={handleCopy}
+                    disabled={!sqlText}
+                  >
+                    SQL 복사
+                  </button>
+                  <button
+                    className="ghost"
+                    onClick={handleDownloadAll}
+                    disabled={!items.length}
+                  >
+                    mp3 전체 다운로드
+                  </button>
+                  <button
+                    className="primary"
+                    onClick={handleInsert}
+                    disabled={!sqlText.trim() || isSending}
+                  >
+                    {isSending ? "전송 중..." : "Supabase로 전송"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="items-grid">
+                {items.map((item) => (
+                  <article key={item.filename} className="item-card">
+                    <h3>{item.title}</h3>
+                    <dl>
+                      <div>
+                        <dt>날짜</dt>
+                        <dd>{item.date}</dd>
+                      </div>
+                      <div>
+                        <dt>길이</dt>
+                        <dd>{item.duration}</dd>
+                      </div>
+                      <div>
+                        <dt>파일명</dt>
+                        <dd>{item.filename}</dd>
+                      </div>
+                    </dl>
+                    <div className="item-links">
+                      <a href={item.audioUrl} target="_blank" rel="noreferrer">
+                        원본 오디오
+                      </a>
+                      <button
+                        className="link-button"
+                        type="button"
+                        onClick={() =>
+                          downloadFile(item.audioUrl, item.filename)
+                        }
+                        disabled={!item.audioUrl}
+                      >
+                        {downloadProgress[item.filename] != null
+                          ? `다운로드 ${downloadProgress[item.filename]}%`
+                          : "다운로드"}
+                      </button>
+                      <a href={item.r2Url} target="_blank" rel="noreferrer">
+                        R2 주소
+                      </a>
+                    </div>
+                    {downloadProgress[item.filename] != null && (
+                      <div className="download-progress">
+                        <div className="progress-bar">
+                          <span
+                            style={{
+                              width: `${downloadProgress[item.filename]}%`,
+                            }}
+                          />
+                        </div>
+                        <span className="progress-text">
+                          {downloadProgress[item.filename]}%
+                        </span>
+                      </div>
+                    )}
+                  </article>
+                ))}
+                {!items.length && (
+                  <div className="empty">
+                    피드를 실행하면 파싱된 항목이 표시됩니다.
+                  </div>
+                )}
+              </div>
+
+              <div className="sql-block">
+                <div className="sql-header">
+                  <h3>SQL 출력</h3>
+                  <div className="header-actions">
+                    <button
+                      className="ghost"
+                      type="button"
+                      onClick={() => {
+                        setSqlText(originalSqlText);
+                      }}
+                      disabled={!originalSqlText}
+                    >
+                      원본으로 되돌리기
+                    </button>
+                    <span className="muted">복사 전 편집 가능</span>
+                  </div>
+                </div>
+                <textarea
+                  value={sqlText}
+                  onChange={(event) => setSqlText(event.target.value)}
+                  placeholder="SQL이 여기에 표시됩니다."
+                />
+                <p className="hint">
+                  SQL 편집 내용이 Supabase 전송 데이터에 반영됩니다.
+                </p>
+              </div>
+            </section>
+          </>
+        )}
+
+        {isProgramsPage && (
+          <>
+            <header className="hero">
+              <div>
+                <p className="eyebrow">RSS → SQL + Supabase</p>
+                <h1>프로그램 빌더</h1>
+                <p className="subhead">
+                  RSS에서 채널 정보를 가져와 programs 테이블에 추가합니다.
+                </p>
+              </div>
+              <div className="hero-card">
+                <div className="metric">
+                  <span className="metric-label">저장소</span>
+                  <strong className="metric-value">R2 이미지</strong>
+                </div>
+                <div className="metric">
+                  <span className="metric-label">모드</span>
+                  <strong className="metric-value">클라이언트 전용</strong>
+                </div>
+              </div>
+            </header>
+
+            <section className="panel">
+              <form className="form" onSubmit={handleProgramSubmit}>
+                <label className="field">
+                  <span>RSS URL</span>
+                  <input
+                    type="url"
+                    value={programRssUrl}
+                    onChange={(event) => setProgramRssUrl(event.target.value)}
+                    placeholder="https://example.com/feed.rss"
+                    required
+                  />
+                </label>
+                <div className="field-row">
+                  <label className="field">
+                    <span>타입</span>
+                    <input
+                      type="text"
+                      value={programType}
+                      onChange={(event) => setProgramType(event.target.value)}
+                      placeholder="podcast"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>언어</span>
+                    <input
+                      type="text"
+                      value={programLanguage}
+                      onChange={(event) =>
+                        setProgramLanguage(event.target.value)
+                      }
+                      placeholder="de"
+                      maxLength={5}
+                    />
+                  </label>
+                </div>
+                <div className="actions">
+                  <button
+                    className="primary"
+                    type="submit"
+                    disabled={programIsLoading}
+                  >
+                    {programIsLoading ? "처리 중..." : "프로그램 불러오기"}
+                  </button>
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => {
+                      setProgramRssUrl("");
+                      setProgramType("podcast");
+                      setProgramLanguage("de");
+                      setProgramImageFolder(DEFAULT_IMAGE_FOLDER);
+                      setProgramTitle("");
+                      setProgramSubtitle("");
+                      setProgramImgUrl("");
+                      setProgramSourceImgUrl("");
+                      setProgramSqlText("");
+                      setProgramOriginalSql("");
+                      setProgramOriginal(null);
+                      setProgramError("");
+                      setProgramStatus("");
+                    }}
+                  >
+                    초기화
+                  </button>
+                </div>
+              </form>
+              {programError && <div className="error">{programError}</div>}
+              {programStatus && <div className="status">{programStatus}</div>}
+            </section>
+
+            <section className="panel results">
+              <div className="panel-header">
+                <div>
+                  <h2>프로그램 정보</h2>
+                  <p className="muted">RSS 채널 메타데이터</p>
+                </div>
+                <div className="header-actions">
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={updateProgramSqlFromFields}
+                    disabled={!programTitle}
+                  >
+                    SQL 갱신
+                  </button>
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={handleProgramReset}
+                    disabled={!programOriginal}
+                  >
+                    원래대로
+                  </button>
+                  <button
+                    className="primary"
+                    onClick={handleProgramInsert}
+                    disabled={!programSqlText.trim() || programIsSending}
+                  >
+                    {programIsSending ? "전송 중..." : "Supabase로 전송"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="program-grid">
+                <label className="field">
+                  <span>제목</span>
+                  <input
+                    type="text"
+                    value={programTitle}
+                    onChange={(event) => setProgramTitle(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>부제</span>
+                  <input
+                    type="text"
+                    value={programSubtitle}
+                    onChange={(event) => setProgramSubtitle(event.target.value)}
+                  />
+                </label>
+                <div className="field readonly span-2">
+                  <span>원본 이미지 URL</span>
+                  <span className="readonly-value">
+                    {programSourceImgUrl || "-"}
+                  </span>
+                </div>
+                <label className="field">
+                  <span>R2 폴더</span>
+                  <input
+                    type="text"
+                    value={programImageFolder}
+                    onChange={(event) =>
+                      setProgramImageFolder(event.target.value)
+                    }
+                    placeholder="de_images/program"
+                  />
+                </label>
+                <div className="program-actions span-2">
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => downloadImage(programSourceImgUrl)}
+                    disabled={!programSourceImgUrl}
+                  >
+                    이미지 다운로드
+                  </button>
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={applyR2ImageUrl}
+                    disabled={!programTitle}
+                  >
+                    변경 반영
+                  </button>
+                  {programSourceImgUrl && (
+                    <a
+                      href={programSourceImgUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      원본 보기
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              <div className="sql-block">
+                <div className="sql-header">
+                  <h3>SQL 출력</h3>
+                  <span className="muted">복사 전 편집 가능</span>
+                </div>
+                <textarea
+                  value={programSqlText}
+                  onChange={(event) => setProgramSqlText(event.target.value)}
+                  placeholder="SQL이 여기에 표시됩니다."
+                />
+                <p className="hint">
+                  SQL 편집 내용이 Supabase 전송 데이터에 반영됩니다.
+                </p>
+              </div>
+            </section>
+          </>
+        )}
+
+        {showAuthModal && (
+          <div
+            className="modal-backdrop"
+            onClick={() => {
+              setAuthError("");
+              setShowAuthModal(false);
+            }}
+          >
+            <div
+              className="modal-card"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="modal-header">
+                <h3>Supabase 로그인</h3>
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={() => {
+                    setAuthError("");
+                    setShowAuthModal(false);
+                  }}
+                  aria-label="닫기"
+                >
+                  닫기
+                </button>
+              </div>
+              {authError && <div className="error auth-error">{authError}</div>}
+              {!authUserEmail ? (
+                <div className="modal-body">
+                  <label className="field">
+                    <span>이메일</span>
+                    <input
+                      type="email"
+                      value={authEmail}
+                      onChange={(event) => setAuthEmail(event.target.value)}
+                      placeholder="you@example.com"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>비밀번호</span>
+                    <input
+                      type="password"
+                      value={authPassword}
+                      onChange={(event) => setAuthPassword(event.target.value)}
+                      placeholder="비밀번호"
+                    />
+                  </label>
+                  <div className="modal-actions">
+                    <button
+                      className="primary"
+                      type="button"
+                      onClick={handleSignIn}
+                      disabled={isAuthBusy}
+                    >
+                      {isAuthBusy ? "로그인 중..." : "로그인"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="modal-body">
+                  <p className="muted">로그인됨: {authUserEmail}</p>
+                  <div className="modal-actions">
+                    <button
+                      className="ghost"
+                      type="button"
+                      onClick={handleSignOut}
+                      disabled={isAuthBusy}
+                    >
+                      {isAuthBusy ? "로그아웃 중..." : "로그아웃"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {toastMessage && (
+          <div className={`toast ${toastTone}`}>{toastMessage}</div>
+        )}
+      </main>
     </div>
   );
 }
