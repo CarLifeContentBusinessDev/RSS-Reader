@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import type { LogEntry, LogTone, ParsedItem, ToastTone } from "../types";
 import { buildItemsWithChannel } from "../utils/r2";
@@ -18,7 +18,6 @@ const EpisodesPage = ({
   authUserEmail,
   onRequireLogin,
   showToast,
-  status,
   setStatus,
 }: EpisodesPageProps) => {
   const [rssUrl, setRssUrl] = useState("");
@@ -28,6 +27,7 @@ const EpisodesPage = ({
   const [channelTitle, setChannelTitle] = useState("");
   const [channelOverride, setChannelOverride] = useState("");
   const [isEditingChannel, setIsEditingChannel] = useState(false);
+  const [r2Folder, setR2Folder] = useState("/de-episodes-audio/program");
   const [items, setItems] = useState<ParsedItem[]>([]);
   const [sqlText, setSqlText] = useState("");
   const [originalSqlText, setOriginalSqlText] = useState("");
@@ -69,6 +69,14 @@ const EpisodesPage = ({
     setProcessState({ label, tone });
   };
 
+  useEffect(() => {
+    if (processState.tone === "success") {
+      showToast(`✓ ${processState.label}`, "success");
+    } else if (processState.tone === "error") {
+      showToast(`✗ ${processState.label}`, "error");
+    }
+  }, [processState.tone, processState.label]);
+
   const updateProgress = (filename: string, value: number | null) => {
     setDownloadProgress((prev) => ({ ...prev, [filename]: value }));
   };
@@ -78,7 +86,11 @@ const EpisodesPage = ({
     const nextChannelTitle = trimmed || originalChannelTitle || channelTitle;
     if (!nextChannelTitle) return;
     const baseItems = originalItems.length ? originalItems : items;
-    const updatedItems = buildItemsWithChannel(baseItems, nextChannelTitle);
+    const updatedItems = buildItemsWithChannel(
+      baseItems,
+      nextChannelTitle,
+      r2Folder,
+    );
     const programNumber = Number(programId) || 0;
     setChannelTitle(nextChannelTitle);
     setItems(updatedItems);
@@ -116,7 +128,13 @@ const EpisodesPage = ({
       addLog("RSS 수신 완료. 파싱 중...", "info");
       const limitNumber = Math.max(1, Number(limit) || 1);
       const programNumber = Number(programId) || 0;
-      const parsed = parseRss(xmlText, limitNumber, programNumber, language);
+      const parsed = parseRss(
+        xmlText,
+        limitNumber,
+        programNumber,
+        language,
+        r2Folder,
+      );
 
       setChannelTitle(parsed.channelTitle);
       setChannelOverride(parsed.channelTitle);
@@ -197,7 +215,9 @@ const EpisodesPage = ({
       setProcess("다운로드 중", "working");
       addLog(`다운로드 시작: ${filename}`, "action");
       updateProgress(filename, 0);
-      const response = await fetch(url);
+      const response = await fetch(
+        `/api/download?url=${encodeURIComponent(url)}`,
+      );
       if (!response.ok) {
         throw new Error(`다운로드 실패: 상태 코드 ${response.status}.`);
       }
@@ -215,7 +235,7 @@ const EpisodesPage = ({
         updateProgress(filename, 100);
         addLog(`다운로드 완료: ${filename}`, "success");
         setProcess("다운로드 완료", "success");
-        return;
+        return true;
       }
 
       const reader = response.body.getReader();
@@ -251,11 +271,13 @@ const EpisodesPage = ({
       addLog(`다운로드 완료: ${filename}`, "success");
       updateProgress(filename, 100);
       setProcess("다운로드 완료", "success");
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : "다운로드 실패.";
       addLog(`다운로드 실패: ${filename} - ${message}`, "error");
       updateProgress(filename, null);
       setProcess("다운로드 실패", "error");
+      return false;
     }
   };
 
@@ -266,16 +288,18 @@ const EpisodesPage = ({
     setDownloadSummary({ total: items.length, completed: 0 });
     let hasError = false;
     for (const item of items) {
-      if (item.audioUrl) {
-        try {
-          await downloadFile(item.audioUrl, item.filename);
-          setDownloadSummary((prev) => ({
-            total: prev.total,
-            completed: prev.completed + 1,
-          }));
-        } catch {
-          hasError = true;
-        }
+      if (!item.audioUrl) {
+        hasError = true;
+        addLog(`다운로드 실패: ${item.filename} - 오디오 URL 없음`, "error");
+        continue;
+      }
+      const ok = await downloadFile(item.audioUrl, item.filename);
+      setDownloadSummary((prev) => ({
+        total: prev.total,
+        completed: prev.completed + 1,
+      }));
+      if (!ok) {
+        hasError = true;
       }
     }
     addLog("전체 다운로드 완료", hasError ? "error" : "success");
@@ -352,6 +376,15 @@ const EpisodesPage = ({
               />
             </label>
           </div>
+          <label className="field">
+            <span>R2 폴더</span>
+            <input
+              type="text"
+              value={r2Folder}
+              onChange={(event) => setR2Folder(event.target.value)}
+              placeholder="de-episodes-audio/program"
+            />
+          </label>
           <div className="actions">
             <button className="primary" type="submit" disabled={isLoading}>
               {isLoading ? "처리 중..." : "SQL 생성"}
@@ -364,6 +397,7 @@ const EpisodesPage = ({
                 setProgramId("0");
                 setLanguage("");
                 setLimit("4");
+                setR2Folder("/de-episodes-audio/program");
                 setChannelTitle("");
                 setChannelOverride("");
                 setIsEditingChannel(false);
@@ -379,31 +413,28 @@ const EpisodesPage = ({
             </button>
           </div>
         </form>
-        <div className="log-panel">
-          <div className="log-header">
-            <h3>처리 로그</h3>
-            <span className="muted">진행 요약</span>
-            <span className={`status-pill ${processState.tone}`}>
-              {processState.label}
-            </span>
-          </div>
-          <div className="log-body" aria-live="polite">
-            <div className="log-list">
-              {logs.length ? (
-                logs.map((entry) => (
+        {error && <div className="error">{error}</div>}
+        {logs.length > 0 && (
+          <div className="log-panel">
+            <div className="log-body" aria-live="polite">
+              <div className="log-list">
+                {logs.map((entry) => (
                   <div key={entry.id} className={`log-item ${entry.tone}`}>
                     <span className="log-dot" />
                     <p>{entry.message}</p>
                   </div>
-                ))
-              ) : (
-                <p className="muted">아직 실행 로그가 없습니다.</p>
-              )}
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-        {error && <div className="error">{error}</div>}
-        {status && <div className="status">{status}</div>}
+        )}
+        {processState.tone !== "idle" && (
+          <div className={`status status-${processState.tone}`}>
+            {processState.tone === "success" && "✓ 완료"}
+            {processState.tone === "error" && "✗ 실패"}
+            {processState.tone === "working" && "처리 중..."}
+          </div>
+        )}
       </section>
 
       <section className="panel results">

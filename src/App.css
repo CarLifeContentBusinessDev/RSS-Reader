@@ -354,6 +354,18 @@
   color: #245c3d;
 }
 
+.status.status-error {
+  background: rgba(255, 120, 120, 0.18);
+  border-color: rgba(255, 120, 120, 0.4);
+  color: #742b2b;
+}
+
+.status.status-working {
+  background: rgba(242, 201, 76, 0.2);
+  border-color: rgba(242, 201, 76, 0.4);
+  color: #6b4d00;
+}
+
 .results {
   display: grid;
   gap: 1.5rem;
