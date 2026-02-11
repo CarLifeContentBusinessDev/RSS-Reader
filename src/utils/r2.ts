@@ -7,12 +7,17 @@ export const sanitizePathSegment = (value: string) =>
 export const buildItemsWithChannel = (
   baseItems: ParsedItem[],
   channelTitle: string,
+  r2Folder: string = "de-episodes-audio/program",
 ): ParsedItem[] =>
   baseItems.map((item, index) => {
     const extCandidate = item.audioUrl.split(".").pop()?.split("?")[0] || "mp3";
     const ext = extCandidate.length > 4 ? "mp3" : extCandidate || "mp3";
     const filename = `${channelTitle}-${index + 1}.${ext}`;
-    const r2Url = `${BASE_URL}/${encodeURIComponent(
+    const trimmedFolder = r2Folder.trim().replace(/^\/+|\/+$/g, "");
+    const folderPath = trimmedFolder
+      ? `${encodeURIComponent(trimmedFolder)}/`
+      : "";
+    const r2Url = `${BASE_URL}/${folderPath}${encodeURIComponent(
       channelTitle,
     )}/${encodeURIComponent(filename)}`;
 

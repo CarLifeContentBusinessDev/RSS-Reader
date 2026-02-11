@@ -1,8 +1,8 @@
 import type { FormEvent } from "react";
-import { useState } from "react";
-import { DEFAULT_IMAGE_FOLDER, R2_IMAGE_BASE_URL } from "../config/constants";
+import { useEffect, useState } from "react";
+import { DEFAULT_IMAGE_FOLDER, BASE_URL } from "../config/constants";
 import { supabase } from "../lib/supabaseClient";
-import type { ParsedProgram, ToastTone } from "../types";
+import type { LogEntry, LogTone, ParsedProgram, ToastTone } from "../types";
 import { buildR2ImageUrl, sanitizePathSegment } from "../utils/r2";
 import { parseProgramRss } from "../utils/rss";
 import { buildProgramSqlText, parseProgramSqlToRows } from "../utils/sql";
@@ -36,13 +36,45 @@ const ProgramsPage = ({
   const [programIsLoading, setProgramIsLoading] = useState(false);
   const [programIsSending, setProgramIsSending] = useState(false);
   const [programError, setProgramError] = useState("");
-  const [programStatus, setProgramStatus] = useState("");
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [processState, setProcessState] = useState<{
+    label: string;
+    tone: "idle" | "working" | "success" | "error";
+  }>({
+    label: "대기 중",
+    tone: "idle",
+  });
+
+  const addLog = (message: string, tone: LogTone = "info") => {
+    const timestamp = new Date().toLocaleTimeString();
+    const entry: LogEntry = {
+      id: `${Date.now()}-${Math.random()}`,
+      message: `${timestamp} · ${message}`,
+      tone,
+    };
+    setLogs((prev) => [...prev, entry]);
+  };
+
+  const setProcess = (
+    label: string,
+    tone: "idle" | "working" | "success" | "error",
+  ) => {
+    setProcessState({ label, tone });
+  };
+
+  useEffect(() => {
+    if (processState.tone === "success") {
+      showToast(`✓ ${processState.label}`, "success");
+    } else if (processState.tone === "error") {
+      showToast(`✗ ${processState.label}`, "error");
+    }
+  }, [processState.tone, processState.label]);
 
   const updateProgramSqlFromFields = () => {
     const nextImgUrl = buildR2ImageUrl(
       programTitle,
       programSourceImgUrl || programImgUrl,
-      R2_IMAGE_BASE_URL,
+      BASE_URL,
       programImageFolder,
     );
     setProgramImgUrl(nextImgUrl);
@@ -64,10 +96,12 @@ const ProgramsPage = ({
   const handleProgramSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setProgramError("");
-    setProgramStatus("");
+    setLogs([]);
+    setProcess("RSS 요청 중", "working");
     setProgramIsLoading(true);
 
     try {
+      addLog("RSS 요청 중...", "action");
       const response = await fetch(
         `/api/rss?url=${encodeURIComponent(programRssUrl)}`,
       );
@@ -75,6 +109,8 @@ const ProgramsPage = ({
         throw new Error(`요청 실패: 상태 코드 ${response.status}.`);
       }
       const xmlText = await response.text();
+      setProcess("RSS 파싱 중", "working");
+      addLog("RSS 수신 완료. 파싱 중...", "info");
       const parsed = parseProgramRss(xmlText);
       setProgramTitle(parsed.title);
       setProgramSubtitle(parsed.subtitle);
@@ -83,7 +119,7 @@ const ProgramsPage = ({
       const nextImgUrl = buildR2ImageUrl(
         parsed.title,
         parsed.imgUrl,
-        R2_IMAGE_BASE_URL,
+        BASE_URL,
         DEFAULT_IMAGE_FOLDER,
       );
       setProgramImgUrl(nextImgUrl);
@@ -96,11 +132,26 @@ const ProgramsPage = ({
       );
       setProgramSqlText(sql);
       setProgramOriginalSql(sql);
-      setProgramStatus("프로그램 정보를 불러왔습니다.");
+      addLog(`프로그램 '${parsed.title}' 파싱 완료.`, "success");
+      addLog("SQL 생성 완료.", "success");
+      setProcess("SQL 생성 완료", "success");
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "알 수 없는 오류입니다.";
+      let message = "오류 발생";
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (typeof err === "object" && err !== null) {
+        const errObj = err as Record<string, unknown>;
+        const parts = [];
+        if (errObj.message) parts.push(errObj.message as string);
+        if (errObj.details) parts.push(`(${errObj.details})`);
+        if (errObj.hint) parts.push(`[${errObj.hint}]`);
+        if (parts.length > 0) {
+          message = parts.join(" ");
+        }
+      }
       setProgramError(message);
+      addLog(`오류: ${message}`, "error");
+      setProcess("오류 발생", "error");
       setProgramTitle("");
       setProgramSubtitle("");
       setProgramCategoryId("");
@@ -123,21 +174,41 @@ const ProgramsPage = ({
     }
     if (!programSqlText.trim()) return;
     setProgramError("");
-    setProgramStatus("");
     setProgramIsSending(true);
+    setProcess("Supabase 전송 중", "working");
 
     try {
       const rowsToInsert = parseProgramSqlToRows(programSqlText);
+      addLog(
+        `Supabase에 ${rowsToInsert.length}개 프로그램 전송 중...`,
+        "action",
+      );
       const { error: insertError } = await supabase
         .from("programs")
         .insert(rowsToInsert);
       if (insertError) {
         throw insertError;
       }
-      setProgramStatus(`프로그램 ${rowsToInsert.length}개를 추가했습니다.`);
+      addLog("Supabase insert 완료.", "success");
+      setProcess("Supabase 전송 완료", "success");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "추가 실패.";
+      let message = "추가 실패";
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (typeof err === "object" && err !== null) {
+        const errObj = err as Record<string, unknown>;
+        const parts = [];
+        if (errObj.message) parts.push(errObj.message as string);
+        if (errObj.details) parts.push(`(${errObj.details})`);
+        if (errObj.hint) parts.push(`[${errObj.hint}]`);
+        if (parts.length > 0) {
+          message = parts.join(" ");
+        }
+      }
       setProgramError(message);
+      addLog(`Supabase insert 실패: ${message}`, "error");
+      setProcess("Supabase 전송 실패", "error");
+      showToast(message, "error");
     } finally {
       setProgramIsSending(false);
     }
@@ -153,7 +224,7 @@ const ProgramsPage = ({
     const resetImgUrl = buildR2ImageUrl(
       programOriginal.title,
       programOriginal.imgUrl,
-      R2_IMAGE_BASE_URL,
+      BASE_URL,
       DEFAULT_IMAGE_FOLDER,
     );
     setProgramImgUrl(resetImgUrl);
@@ -284,7 +355,7 @@ const ProgramsPage = ({
                 setProgramOriginalSql("");
                 setProgramOriginal(null);
                 setProgramError("");
-                setProgramStatus("");
+                setLogs([]);
               }}
             >
               초기화
@@ -292,7 +363,27 @@ const ProgramsPage = ({
           </div>
         </form>
         {programError && <div className="error">{programError}</div>}
-        {programStatus && <div className="status">{programStatus}</div>}
+        {logs.length > 0 && (
+          <div className="log-panel">
+            <div className="log-body" aria-live="polite">
+              <div className="log-list">
+                {logs.map((log) => (
+                  <div key={log.id} className={`log-item ${log.tone}`}>
+                    <span className="log-dot" />
+                    <p>{log.message}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        {processState.tone !== "idle" && (
+          <div className={`status status-${processState.tone}`}>
+            {processState.tone === "success" && "✓ 완료"}
+            {processState.tone === "error" && "✗ 실패"}
+            {processState.tone === "working" && "처리 중..."}
+          </div>
+        )}
       </section>
 
       <section className="panel results">
@@ -328,83 +419,100 @@ const ProgramsPage = ({
           </div>
         </div>
 
-        <div className="program-grid">
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "1rem",
-            }}
-          >
-            <label className="field">
-              <span>제목</span>
-              <input
-                type="text"
-                value={programTitle}
-                onChange={(event) => setProgramTitle(event.target.value)}
-              />
-            </label>
-            <label className="field">
-              <span>부제</span>
-              <input
-                type="text"
-                value={programSubtitle}
-                onChange={(event) => setProgramSubtitle(event.target.value)}
-              />
-            </label>
-          </div>
-          <div className="field readonly span-2">
-            <span>원본 이미지 URL</span>
-            <span className="readonly-value">{programSourceImgUrl || "-"}</span>
-          </div>
-          <label className="field">
-            <span>R2 폴더</span>
-            <input
-              type="text"
-              value={programImageFolder}
-              onChange={(event) => setProgramImageFolder(event.target.value)}
-              placeholder="de_images/program"
-            />
-          </label>
-          <div className="program-actions span-2">
-            <button
-              className="ghost"
-              type="button"
-              onClick={() => downloadImage(programSourceImgUrl)}
-              disabled={!programSourceImgUrl}
-            >
-              이미지 다운로드
-            </button>
-            <button
-              className="ghost"
-              type="button"
-              onClick={applyR2ImageUrl}
-              disabled={!programTitle}
-            >
-              변경 반영
-            </button>
-            {programSourceImgUrl && (
-              <a href={programSourceImgUrl} target="_blank" rel="noreferrer">
-                원본 보기
-              </a>
-            )}
-          </div>
-        </div>
+        {programTitle ? (
+          <>
+            <div className="program-grid">
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "1rem",
+                }}
+              >
+                <label className="field">
+                  <span>제목</span>
+                  <input
+                    type="text"
+                    value={programTitle}
+                    onChange={(event) => setProgramTitle(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>부제</span>
+                  <input
+                    type="text"
+                    value={programSubtitle}
+                    onChange={(event) => setProgramSubtitle(event.target.value)}
+                  />
+                </label>
+              </div>
+              <div className="field readonly span-2">
+                <span>원본 이미지 URL</span>
+                <span className="readonly-value">
+                  {programSourceImgUrl || "-"}
+                </span>
+              </div>
+              <label className="field">
+                <span>R2 폴더</span>
+                <input
+                  type="text"
+                  value={programImageFolder}
+                  onChange={(event) =>
+                    setProgramImageFolder(event.target.value)
+                  }
+                  placeholder="de_images/program"
+                />
+              </label>
+              <div className="program-actions span-2">
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={() => downloadImage(programSourceImgUrl)}
+                  disabled={!programSourceImgUrl}
+                >
+                  이미지 다운로드
+                </button>
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={applyR2ImageUrl}
+                  disabled={!programTitle}
+                >
+                  변경 반영
+                </button>
+                {programSourceImgUrl && (
+                  <a
+                    href={programSourceImgUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    원본 보기
+                  </a>
+                )}
+              </div>
+            </div>
 
-        <div className="sql-block">
-          <div className="sql-header">
-            <h3>SQL 출력</h3>
-            <span className="muted">복사 전 편집 가능</span>
+            <div className="sql-block">
+              <div className="sql-header">
+                <h3>SQL 출력</h3>
+                <span className="muted">복사 전 편집 가능</span>
+              </div>
+              <textarea
+                value={programSqlText}
+                onChange={(event) => setProgramSqlText(event.target.value)}
+                placeholder="SQL이 여기에 표시됩니다."
+              />
+              <p className="hint">
+                SQL 편집 내용이 Supabase 전송 데이터에 반영됩니다.
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="empty">
+            프로그램 RSS URL을 입력하고 프로그램 불러오기를 실행하면 결과가
+            표시됩니다.
           </div>
-          <textarea
-            value={programSqlText}
-            onChange={(event) => setProgramSqlText(event.target.value)}
-            placeholder="SQL이 여기에 표시됩니다."
-          />
-          <p className="hint">
-            SQL 편집 내용이 Supabase 전송 데이터에 반영됩니다.
-          </p>
-        </div>
+        )}
       </section>
     </>
   );
