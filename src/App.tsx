@@ -163,17 +163,36 @@ const parseRss = (
       ? ""
       : `INSERT INTO episodes\n  (title, program_id, audio_file, date, duration, language)\nVALUES\n${sqlLines.join("\n")};`;
 
-  const rows: EpisodeRow[] = items.map((entry) => ({
-    title: entry.title,
-    program_id: programId,
-    audio_file: entry.r2Url,
-    date: entry.date,
-    duration: entry.duration,
-    language: [language],
-  }));
-
-  return { channelTitle, items, sqlText, rows };
+  return { channelTitle, items, sqlText };
 };
+
+const buildSqlText = (
+  items: ParsedItem[],
+  programId: number,
+  language: string,
+) => {
+  if (!items.length) return "";
+
+  const sqlLines = items.map((entry, index) => {
+    const safeTitle = entry.title.replace(/'/g, "''");
+    const isLast = index === items.length - 1;
+    return `('${safeTitle}', ${programId}, '${entry.r2Url}', '${entry.date}', '${entry.duration}', ARRAY['${language}'])${isLast ? "" : ","}`;
+  });
+
+  return `INSERT INTO episodes\n  (title, program_id, audio_file, date, duration, language)\nVALUES\n${sqlLines.join("\n")};`;
+};
+
+const buildItemsWithChannel = (baseItems: ParsedItem[], channelTitle: string) =>
+  baseItems.map((item, index) => {
+    const extCandidate = item.audioUrl.split(".").pop()?.split("?")[0] || "mp3";
+    const ext = extCandidate.length > 4 ? "mp3" : extCandidate || "mp3";
+    const filename = `${channelTitle}-${index + 1}.${ext}`;
+    const r2Url = `${BASE_URL}/${encodeURIComponent(
+      channelTitle,
+    )}/${encodeURIComponent(filename)}`;
+
+    return { ...item, filename, r2Url };
+  });
 
 function App() {
   const [rssUrl, setRssUrl] = useState("");
@@ -189,11 +208,13 @@ function App() {
   const [toastMessage, setToastMessage] = useState("");
   const [toastTone, setToastTone] = useState<ToastTone>("info");
   const [channelTitle, setChannelTitle] = useState("");
+  const [channelOverride, setChannelOverride] = useState("");
+  const [isEditingChannel, setIsEditingChannel] = useState(false);
   const [items, setItems] = useState<ParsedItem[]>([]);
-  const [rows, setRows] = useState<EpisodeRow[]>([]);
   const [sqlText, setSqlText] = useState("");
-  const [originalRows, setOriginalRows] = useState<EpisodeRow[]>([]);
   const [originalSqlText, setOriginalSqlText] = useState("");
+  const [originalItems, setOriginalItems] = useState<ParsedItem[]>([]);
+  const [originalChannelTitle, setOriginalChannelTitle] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
@@ -277,6 +298,28 @@ function App() {
     }, 2200);
   };
 
+  const applyChannelOverride = () => {
+    const trimmed = channelOverride.trim();
+    const nextChannelTitle = trimmed || originalChannelTitle || channelTitle;
+    if (!nextChannelTitle) return;
+    const baseItems = originalItems.length ? originalItems : items;
+    const updatedItems = buildItemsWithChannel(baseItems, nextChannelTitle);
+    const programNumber = Number(programId) || 0;
+    setChannelTitle(nextChannelTitle);
+    setItems(updatedItems);
+    setSqlText(buildSqlText(updatedItems, programNumber, language));
+    setIsEditingChannel(false);
+  };
+
+  const resetChannelOverride = () => {
+    if (!originalItems.length) return;
+    setChannelOverride(originalChannelTitle);
+    setChannelTitle(originalChannelTitle);
+    setItems(originalItems);
+    setSqlText(originalSqlText);
+    setIsEditingChannel(false);
+  };
+
   const handleSignIn = async () => {
     if (!authEmail || !authPassword) {
       setAuthError("이메일과 비밀번호를 입력해주세요.");
@@ -345,11 +388,13 @@ function App() {
       const parsed = parseRss(xmlText, limitNumber, programNumber, language);
 
       setChannelTitle(parsed.channelTitle);
+      setChannelOverride(parsed.channelTitle);
+      setIsEditingChannel(false);
       setItems(parsed.items);
-      setRows(parsed.rows);
       setSqlText(parsed.sqlText);
-      setOriginalRows(parsed.rows);
       setOriginalSqlText(parsed.sqlText);
+      setOriginalItems(parsed.items);
+      setOriginalChannelTitle(parsed.channelTitle);
       addLog(
         `'${parsed.channelTitle}' ${parsed.items.length}개 항목 파싱 완료.`,
         "success",
@@ -363,11 +408,13 @@ function App() {
       addLog(`오류: ${message}`, "error");
       setProcess("오류 발생", "error");
       setChannelTitle("");
+      setChannelOverride("");
+      setIsEditingChannel(false);
       setItems([]);
-      setRows([]);
       setSqlText("");
-      setOriginalRows([]);
       setOriginalSqlText("");
+      setOriginalItems([]);
+      setOriginalChannelTitle("");
     } finally {
       setIsLoading(false);
     }
@@ -615,9 +662,12 @@ function App() {
                 setLanguage("");
                 setLimit("4");
                 setChannelTitle("");
+                setChannelOverride("");
+                setIsEditingChannel(false);
                 setItems([]);
-                setRows([]);
                 setSqlText("");
+                setOriginalItems([]);
+                setOriginalChannelTitle("");
                 setError("");
                 setStatus("");
               }}
@@ -657,11 +707,53 @@ function App() {
         <div className="panel-header">
           <div>
             <h2>파싱된 항목</h2>
-            <p className="muted">
-              {channelTitle
-                ? `채널: ${channelTitle}`
-                : "아직 불러온 피드가 없습니다."}
-            </p>
+            <div className="channel-editor">
+              <div className="channel-row">
+                <span className="channel-prefix">채널 : </span>
+                {!isEditingChannel ? (
+                  <span className="channel-value">
+                    {channelTitle || "아직 불러온 피드가 없습니다."}
+                  </span>
+                ) : (
+                  <input
+                    className="channel-input"
+                    type="text"
+                    value={channelOverride}
+                    onChange={(event) => setChannelOverride(event.target.value)}
+                    placeholder="예: Eine Stunde History"
+                    disabled={!items.length}
+                  />
+                )}
+              </div>
+              <div className="channel-actions">
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={() => setIsEditingChannel((prev) => !prev)}
+                  disabled={!items.length}
+                >
+                  {isEditingChannel ? "수정 취소" : "편집"}
+                </button>
+                {isEditingChannel && (
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={applyChannelOverride}
+                    disabled={!items.length}
+                  >
+                    일괄 적용
+                  </button>
+                )}
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={resetChannelOverride}
+                  disabled={!originalItems.length}
+                >
+                  원래대로
+                </button>
+              </div>
+            </div>
           </div>
           {downloadSummary.total > 0 && (
             <div className="download-summary">
@@ -757,7 +849,6 @@ function App() {
                 type="button"
                 onClick={() => {
                   setSqlText(originalSqlText);
-                  setRows(originalRows);
                 }}
                 disabled={!originalSqlText}
               >
