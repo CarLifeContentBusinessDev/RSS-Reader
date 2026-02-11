@@ -1185,19 +1185,19 @@ function App() {
             <header className="hero">
               <div>
                 <p className="eyebrow">RSS → SQL + Supabase</p>
-                <h1>프로그램 빌더</h1>
+                <h1>Program Builder</h1>
                 <p className="subhead">
                   RSS에서 채널 정보를 가져와 programs 테이블에 추가합니다.
                 </p>
               </div>
               <div className="hero-card">
                 <div className="metric">
-                  <span className="metric-label">저장소</span>
-                  <strong className="metric-value">R2 이미지</strong>
+                  <span className="metric-label">Storage</span>
+                  <strong className="metric-value">R2 public URLs</strong>
                 </div>
                 <div className="metric">
-                  <span className="metric-label">모드</span>
-                  <strong className="metric-value">클라이언트 전용</strong>
+                  <span className="metric-label">Mode</span>
+                  <strong className="metric-value">Client Only</strong>
                 </div>
               </div>
             </header>
@@ -1216,7 +1216,7 @@ function App() {
                 </label>
                 <div className="field-row">
                   <label className="field">
-                    <span>타입</span>
+                    <span>Type</span>
                     <input
                       type="text"
                       value={programType}
@@ -1225,7 +1225,7 @@ function App() {
                     />
                   </label>
                   <label className="field">
-                    <span>언어</span>
+                    <span>Language</span>
                     <input
                       type="text"
                       value={programLanguage}
