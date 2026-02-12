@@ -41,7 +41,6 @@ const EpisodesPage = ({
   const [limit, setLimit] = useState("4");
   const [channelTitle, setChannelTitle] = useState("");
   const [channelOverride, setChannelOverride] = useState("");
-  const [isEditingChannel, setIsEditingChannel] = useState(false);
   const [r2Folder, setR2Folder] = useState(buildEpisodeFolder("de"));
   const [items, setItems] = useState<ParsedItem[]>([]);
   const [sqlText, setSqlText] = useState("");
@@ -114,7 +113,19 @@ const EpisodesPage = ({
     setChannelTitle(nextChannelTitle);
     setItems(updatedItems);
     setSqlText(buildSqlText(updatedItems, programNumber, language));
-    setIsEditingChannel(false);
+  };
+
+  const applyChanges = () => {
+    const baseItems = originalItems.length ? originalItems : items;
+    const updatedItems = buildItemsWithChannel(
+      baseItems,
+      channelOverride.trim() || channelTitle,
+      r2Folder,
+    );
+    const programNumber = Number(programId) || 0;
+    setChannelTitle(channelOverride.trim() || channelTitle);
+    setItems(updatedItems);
+    setSqlText(buildSqlText(updatedItems, programNumber, language));
   };
 
   const resetChannelOverride = () => {
@@ -123,7 +134,7 @@ const EpisodesPage = ({
     setChannelTitle(originalChannelTitle);
     setItems(originalItems);
     setSqlText(originalSqlText);
-    setIsEditingChannel(false);
+    setR2Folder(buildEpisodeFolder(language));
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -157,7 +168,6 @@ const EpisodesPage = ({
 
       setChannelTitle(parsed.channelTitle);
       setChannelOverride(parsed.channelTitle);
-      setIsEditingChannel(false);
       setItems(parsed.items);
       setSqlText(parsed.sqlText);
       setOriginalSqlText(parsed.sqlText);
@@ -406,7 +416,6 @@ const EpisodesPage = ({
                 setR2Folder(buildEpisodeFolder("de"));
                 setChannelTitle("");
                 setChannelOverride("");
-                setIsEditingChannel(false);
                 setItems([]);
                 setSqlText("");
                 setOriginalItems([]);
@@ -472,57 +481,17 @@ const EpisodesPage = ({
 
         {items.length > 0 ? (
           <>
-            <label className="field">
-              <span>R2 폴더</span>
-              <input
-                type="text"
-                value={r2Folder}
-                onChange={(event) => setR2Folder(event.target.value)}
-                placeholder="/de-episodes-audio/program"
-              />
-            </label>
             <div className="channel-editor">
               <div className="channel-row">
                 <span className="channel-prefix">채널 : </span>
-                {!isEditingChannel ? (
-                  <span className="channel-value">
-                    {channelTitle || "아직 불러온 피드가 없습니다."}
-                  </span>
-                ) : (
-                  <input
-                    className="channel-input"
-                    type="text"
-                    value={channelOverride}
-                    onChange={(event) => setChannelOverride(event.target.value)}
-                    placeholder="예: Eine Stunde History"
-                  />
-                )}
-              </div>
-              <div className="channel-actions">
-                <button
-                  className="text-button"
-                  type="button"
-                  onClick={() => setIsEditingChannel((prev) => !prev)}
-                >
-                  {isEditingChannel ? "수정 취소" : "편집"}
-                </button>
-                {isEditingChannel && (
-                  <button
-                    className="text-button"
-                    type="button"
-                    onClick={applyChannelOverride}
-                  >
-                    일괄 적용
-                  </button>
-                )}
-                <button
-                  className="text-button"
-                  type="button"
-                  onClick={resetChannelOverride}
-                  disabled={!originalItems.length}
-                >
-                  원래대로
-                </button>
+                <input
+                  className="channel-input"
+                  type="text"
+                  value={channelOverride}
+                  onChange={(event) => setChannelOverride(event.target.value)}
+                  placeholder={channelTitle || "채널명"}
+                  style={{ flex: 1, minWidth: "400px" }}
+                />
               </div>
             </div>
             {downloadSummary.total > 0 && (
@@ -575,9 +544,6 @@ const EpisodesPage = ({
                         ? `다운로드 ${downloadProgress[item.filename]}%`
                         : "다운로드"}
                     </button>
-                    <a href={item.r2Url} target="_blank" rel="noreferrer">
-                      R2 주소
-                    </a>
                   </div>
                   {downloadProgress[item.filename] != null && (
                     <div className="download-progress">
@@ -595,6 +561,39 @@ const EpisodesPage = ({
                   )}
                 </article>
               ))}
+            </div>
+
+            <div className="program-grid">
+              <label className="field" style={{ maxWidth: "500px" }}>
+                <span>R2 폴더</span>
+                <input
+                  type="text"
+                  value={r2Folder}
+                  onChange={(event) => setR2Folder(event.target.value)}
+                  placeholder="/de-episodes-audio/program"
+                />
+              </label>
+              <div className="program-actions span-2">
+                <div className="program-actions-left">
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={resetChannelOverride}
+                    disabled={!originalItems.length}
+                  >
+                    원래대로
+                  </button>
+                </div>
+                <div className="program-actions-right">
+                  <button
+                    className="primary"
+                    type="button"
+                    onClick={applyChanges}
+                  >
+                    변경 반영
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="sql-block">
