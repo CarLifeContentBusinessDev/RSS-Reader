@@ -530,11 +530,22 @@ const ProgramsPage = ({
                 </button>
                 {programSourceImgUrl && (
                   <a
+                    className="text-button"
                     href={programSourceImgUrl}
                     target="_blank"
                     rel="noreferrer"
                   >
                     원본 보기
+                  </a>
+                )}
+                {programImgUrl && (
+                  <a
+                    className="text-button"
+                    href={programImgUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    R2 확인
                   </a>
                 )}
               </div>
