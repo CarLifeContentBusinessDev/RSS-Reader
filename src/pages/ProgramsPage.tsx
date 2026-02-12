@@ -30,16 +30,19 @@ const TYPE_OPTIONS = [
   { value: "radio", label: "radio" },
 ];
 
+const buildImageFolder = (language: string) =>
+  `/${language || "de"}_${DEFAULT_IMAGE_FOLDER}`;
+
 const ProgramsPage = ({
   authUserEmail,
   onRequireLogin,
   showToast,
 }: ProgramsPageProps) => {
   const [programRssUrl, setProgramRssUrl] = useState("");
-  const [programLanguage, setProgramLanguage] = useState("");
+  const [programLanguage, setProgramLanguage] = useState("de");
   const [programType, setProgramType] = useState("podcast");
   const [programImageFolder, setProgramImageFolder] =
-    useState(DEFAULT_IMAGE_FOLDER);
+    useState(buildImageFolder("de"));
   const [programTitle, setProgramTitle] = useState("");
   const [programSubtitle, setProgramSubtitle] = useState("");
   const [programCategoryId, setProgramCategoryId] = useState<number | "">("");
@@ -91,6 +94,10 @@ const ProgramsPage = ({
     }
   }, [processState.tone, processState.label]);
 
+  useEffect(() => {
+    setProgramImageFolder(buildImageFolder(programLanguage));
+  }, [programLanguage]);
+
   const updateProgramSqlFromFields = () => {
     const nextImgUrl = buildR2ImageUrl(
       programTitle,
@@ -138,12 +145,13 @@ const ProgramsPage = ({
       setProgramTitle(parsed.title);
       setProgramSubtitle(parsed.subtitle);
       setProgramSourceImgUrl(parsed.imgUrl);
-      setProgramImageFolder(DEFAULT_IMAGE_FOLDER);
+      const nextFolder = buildImageFolder(programLanguage);
+      setProgramImageFolder(nextFolder);
       const nextImgUrl = buildR2ImageUrl(
         parsed.title,
         parsed.imgUrl,
         BASE_URL,
-        DEFAULT_IMAGE_FOLDER,
+        nextFolder,
       );
       setProgramImgUrl(nextImgUrl);
       setProgramOriginal(parsed);
@@ -182,7 +190,7 @@ const ProgramsPage = ({
       setProgramBroadcastingId("");
       setProgramImgUrl("");
       setProgramSourceImgUrl("");
-      setProgramImageFolder(DEFAULT_IMAGE_FOLDER);
+      setProgramImageFolder(buildImageFolder(programLanguage));
       setProgramSqlText("");
       setProgramOriginalSql("");
       setProgramOriginal(null);
@@ -257,12 +265,13 @@ const ProgramsPage = ({
     setProgramCategoryId("");
     setProgramBroadcastingId("");
     setProgramSourceImgUrl(programOriginal.imgUrl);
-    setProgramImageFolder(DEFAULT_IMAGE_FOLDER);
+    const nextFolder = buildImageFolder(programLanguage);
+    setProgramImageFolder(nextFolder);
     const resetImgUrl = buildR2ImageUrl(
       programOriginal.title,
       programOriginal.imgUrl,
       BASE_URL,
-      DEFAULT_IMAGE_FOLDER,
+      nextFolder,
     );
     setProgramImgUrl(resetImgUrl);
     setProgramSqlText(programOriginalSql);
@@ -388,7 +397,7 @@ const ProgramsPage = ({
                 setProgramRssUrl("");
                 setProgramType("podcast");
                 setProgramLanguage("de");
-                setProgramImageFolder(DEFAULT_IMAGE_FOLDER);
+                setProgramImageFolder(buildImageFolder("de"));
                 setProgramTitle("");
                 setProgramSubtitle("");
                 setProgramCategoryId("");
@@ -508,7 +517,7 @@ const ProgramsPage = ({
                   onChange={(event) =>
                     setProgramImageFolder(event.target.value)
                   }
-                  placeholder="de_images/program"
+                  placeholder={buildImageFolder(programLanguage)}
                 />
               </label>
               <div className="program-actions span-2">
