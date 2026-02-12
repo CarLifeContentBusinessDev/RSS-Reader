@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { DEFAULT_IMAGE_FOLDER, BASE_URL } from "../config/constants";
 import { supabase } from "../lib/supabaseClient";
 import type { LogEntry, LogTone, ParsedProgram, ToastTone } from "../types";
+import SelectField from "../components/SelectField";
 import { buildR2ImageUrl, sanitizePathSegment } from "../utils/r2";
 import { parseProgramRss } from "../utils/rss";
 import { buildProgramSqlText, parseProgramSqlToRows } from "../utils/sql";
@@ -13,19 +14,33 @@ type ProgramsPageProps = {
   showToast: (message: string, tone?: ToastTone) => void;
 };
 
+const LANGUAGE_OPTIONS = [
+  { value: "ko", label: "ko" },
+  { value: "en", label: "en" },
+  { value: "de", label: "de" },
+  { value: "jp", label: "jp" },
+  { value: "gb", label: "gb" },
+  { value: "fr", label: "fr" },
+  { value: "es", label: "es" },
+  { value: "it", label: "it" },
+];
+
 const ProgramsPage = ({
   authUserEmail,
   onRequireLogin,
   showToast,
 }: ProgramsPageProps) => {
   const [programRssUrl, setProgramRssUrl] = useState("");
-  const [programLanguage, setProgramLanguage] = useState("de");
+  const [programLanguage, setProgramLanguage] = useState("");
   const [programType, setProgramType] = useState("podcast");
   const [programImageFolder, setProgramImageFolder] =
     useState(DEFAULT_IMAGE_FOLDER);
   const [programTitle, setProgramTitle] = useState("");
   const [programSubtitle, setProgramSubtitle] = useState("");
   const [programCategoryId, setProgramCategoryId] = useState<number | "">("");
+  const [programBroadcastingId, setProgramBroadcastingId] = useState<
+    number | ""
+  >("");
   const [programImgUrl, setProgramImgUrl] = useState("");
   const [programSourceImgUrl, setProgramSourceImgUrl] = useState("");
   const [programSqlText, setProgramSqlText] = useState("");
@@ -90,6 +105,7 @@ const ProgramsPage = ({
         programType,
         programLanguage,
         programCategoryId || undefined,
+        programBroadcastingId || undefined,
       ),
     );
   };
@@ -131,6 +147,7 @@ const ProgramsPage = ({
         programType,
         programLanguage,
         programCategoryId || undefined,
+        programBroadcastingId || undefined,
       );
       setProgramSqlText(sql);
       setProgramOriginalSql(sql);
@@ -157,6 +174,7 @@ const ProgramsPage = ({
       setProgramTitle("");
       setProgramSubtitle("");
       setProgramCategoryId("");
+      setProgramBroadcastingId("");
       setProgramImgUrl("");
       setProgramSourceImgUrl("");
       setProgramImageFolder(DEFAULT_IMAGE_FOLDER);
@@ -232,6 +250,7 @@ const ProgramsPage = ({
     setProgramTitle(programOriginal.title);
     setProgramSubtitle(programOriginal.subtitle);
     setProgramCategoryId("");
+    setProgramBroadcastingId("");
     setProgramSourceImgUrl(programOriginal.imgUrl);
     setProgramImageFolder(DEFAULT_IMAGE_FOLDER);
     const resetImgUrl = buildR2ImageUrl(
@@ -316,26 +335,35 @@ const ProgramsPage = ({
                 type="text"
                 value={programType}
                 onChange={(event) => setProgramType(event.target.value)}
-                placeholder="podcast"
+                placeholder="type"
               />
             </label>
+            <SelectField
+              label="Language"
+              value={programLanguage}
+              options={LANGUAGE_OPTIONS}
+              onChange={setProgramLanguage}
+            />
             <label className="field">
-              <span>Language</span>
-              <input
-                type="text"
-                value={programLanguage}
-                onChange={(event) => setProgramLanguage(event.target.value)}
-                placeholder="de"
-                maxLength={5}
-              />
-            </label>
-            <label className="field">
-              <span>카테고리 ID</span>
+              <span>Category ID</span>
               <input
                 type="number"
                 value={programCategoryId}
                 onChange={(event) =>
                   setProgramCategoryId(
+                    event.target.value ? Number(event.target.value) : "",
+                  )
+                }
+                placeholder="선택사항"
+              />
+            </label>
+            <label className="field">
+              <span>Broadcasting ID</span>
+              <input
+                type="number"
+                value={programBroadcastingId}
+                onChange={(event) =>
+                  setProgramBroadcastingId(
                     event.target.value ? Number(event.target.value) : "",
                   )
                 }
@@ -362,6 +390,7 @@ const ProgramsPage = ({
                 setProgramTitle("");
                 setProgramSubtitle("");
                 setProgramCategoryId("");
+                setProgramBroadcastingId("");
                 setProgramImgUrl("");
                 setProgramSourceImgUrl("");
                 setProgramSqlText("");

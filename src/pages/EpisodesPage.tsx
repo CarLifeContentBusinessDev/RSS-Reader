@@ -2,6 +2,7 @@ import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import type { LogEntry, LogTone, ParsedItem, ToastTone } from "../types";
+import SelectField from "../components/SelectField";
 import { buildItemsWithChannel } from "../utils/r2";
 import { parseRss } from "../utils/rss";
 import { buildSqlText, parseSqlToRows } from "../utils/sql";
@@ -13,6 +14,17 @@ type EpisodesPageProps = {
   status: string;
   setStatus: (value: string) => void;
 };
+
+const LANGUAGE_OPTIONS = [
+  { value: "ko", label: "ko" },
+  { value: "en", label: "en" },
+  { value: "de", label: "de" },
+  { value: "jp", label: "jp" },
+  { value: "gb", label: "gb" },
+  { value: "fr", label: "fr" },
+  { value: "es", label: "es" },
+  { value: "it", label: "it" },
+];
 
 const EpisodesPage = ({
   authUserEmail,
@@ -355,16 +367,12 @@ const EpisodesPage = ({
                 min={0}
               />
             </label>
-            <label className="field">
-              <span>Language</span>
-              <input
-                type="text"
-                value={language}
-                onChange={(event) => setLanguage(event.target.value)}
-                placeholder="de"
-                maxLength={5}
-              />
-            </label>
+            <SelectField
+              label="Language"
+              value={language}
+              options={LANGUAGE_OPTIONS}
+              onChange={setLanguage}
+            />
             <label className="field">
               <span>Limit</span>
               <input
