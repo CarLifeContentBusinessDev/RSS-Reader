@@ -33,9 +33,7 @@ export const buildR2ImageUrl = (
   const trimmedBase = baseUrl.replace(/\/+$/g, "");
   const trimmedFolder = folder.trim().replace(/^\/+|\/+$/g, "");
   const safeTitle = sanitizePathSegment(title) || "program";
-  const extCandidate = sourceUrl.split(".").pop()?.split("?")[0] || "webp";
-  const ext = extCandidate.length > 5 ? "webp" : extCandidate || "webp";
-  const filename = `${safeTitle}.${ext}`;
+  const filename = `${safeTitle}.webp`;
   const encodedFile = encodeURIComponent(filename);
 
   if (!trimmedFolder) {
