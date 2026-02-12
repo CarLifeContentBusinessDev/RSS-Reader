@@ -1,6 +1,6 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
-import { DEFAULT_IMAGE_FOLDER, BASE_URL } from "../config/constants";
+import { DEFAULT_IMAGE_FOLDER } from "../config/constants";
 import { supabase } from "../lib/supabaseClient";
 import type { LogEntry, LogTone, ParsedProgram, ToastTone } from "../types";
 import SelectField from "../components/SelectField";
@@ -93,7 +93,7 @@ const ProgramsPage = ({
     } else if (processState.tone === "error") {
       showToast(`✗ ${processState.label}`, "error");
     }
-  }, [processState.tone, processState.label]);
+  }, [processState.tone, processState.label, showToast]);
 
   useEffect(() => {
     setProgramImageFolder(buildImageFolder(programLanguage));
@@ -103,7 +103,6 @@ const ProgramsPage = ({
     const nextImgUrl = buildR2ImageUrl(
       programTitle,
       programSourceImgUrl || programImgUrl,
-      BASE_URL,
       programImageFolder,
     );
     setProgramImgUrl(nextImgUrl);
@@ -151,7 +150,6 @@ const ProgramsPage = ({
       const nextImgUrl = buildR2ImageUrl(
         parsed.title,
         parsed.imgUrl,
-        BASE_URL,
         nextFolder,
       );
       setProgramImgUrl(nextImgUrl);
@@ -271,7 +269,6 @@ const ProgramsPage = ({
     const resetImgUrl = buildR2ImageUrl(
       programOriginal.title,
       programOriginal.imgUrl,
-      BASE_URL,
       nextFolder,
     );
     setProgramImgUrl(resetImgUrl);

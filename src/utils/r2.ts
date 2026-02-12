@@ -26,7 +26,6 @@ export const buildItemsWithChannel = (
 
 export const buildR2ImageUrl = (
   title: string,
-  sourceUrl: string,
   baseUrl: string,
   folder: string,
 ) => {
