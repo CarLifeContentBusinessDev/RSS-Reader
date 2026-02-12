@@ -454,14 +454,6 @@ const ProgramsPage = ({
             <button
               className="ghost"
               type="button"
-              onClick={updateProgramSqlFromFields}
-              disabled={!programTitle}
-            >
-              SQL 갱신
-            </button>
-            <button
-              className="ghost"
-              type="button"
               onClick={handleProgramReset}
               disabled={!programOriginal}
             >
@@ -522,42 +514,62 @@ const ProgramsPage = ({
                 />
               </label>
               <div className="program-actions span-2">
-                <button
-                  className="ghost"
-                  type="button"
-                  onClick={() => downloadImage(programSourceImgUrl)}
-                  disabled={!programSourceImgUrl}
-                >
-                  이미지 다운로드
-                </button>
-                <button
-                  className="ghost"
-                  type="button"
-                  onClick={applyR2ImageUrl}
-                  disabled={!programTitle}
-                >
-                  변경 반영
-                </button>
-                {programSourceImgUrl && (
+                <div className="program-actions-left">
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => downloadImage(programSourceImgUrl)}
+                    disabled={!programSourceImgUrl}
+                  >
+                    이미지 다운로드
+                  </button>
                   <a
-                    className="text-button"
-                    href={programSourceImgUrl}
+                    className="ghost"
+                    href="https://bigconvert.11zon.com/ko/png-to-webp"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    원본 보기
+                    webp 변환
                   </a>
-                )}
-                {programImgUrl && (
                   <a
-                    className="text-button"
-                    href={programImgUrl}
+                    className="ghost"
+                    href="https://imagecompressor.11zon.com/ko/compress-webp"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    R2 확인
+                    webp 압축
                   </a>
-                )}
+                  {programSourceImgUrl && (
+                    <a
+                      className="text-button"
+                      href={programSourceImgUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      원본 보기
+                    </a>
+                  )}
+                  {programImgUrl && (
+                    <a
+                      className="text-button"
+                      href={programImgUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      R2 확인
+                    </a>
+                  )}
+                </div>
+                <div className="program-actions-right">
+                  <button
+                    className="primary"
+                    type="button"
+                    onClick={applyR2ImageUrl}
+                    disabled={!programTitle}
+                  >
+                    변경 반영
+                  </button>
+                </div>
               </div>
             </div>
 
