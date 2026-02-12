@@ -89,7 +89,7 @@ const EpisodesPage = ({
     } else if (processState.tone === "error") {
       showToast(`✗ ${processState.label}`, "error");
     }
-  }, [processState.tone, processState.label]);
+  }, [processState.tone, processState.label, showToast]);
 
   useEffect(() => {
     setR2Folder(buildEpisodeFolder(language));
@@ -97,22 +97,6 @@ const EpisodesPage = ({
 
   const updateProgress = (filename: string, value: number | null) => {
     setDownloadProgress((prev) => ({ ...prev, [filename]: value }));
-  };
-
-  const applyChannelOverride = () => {
-    const trimmed = channelOverride.trim();
-    const nextChannelTitle = trimmed || originalChannelTitle || channelTitle;
-    if (!nextChannelTitle) return;
-    const baseItems = originalItems.length ? originalItems : items;
-    const updatedItems = buildItemsWithChannel(
-      baseItems,
-      nextChannelTitle,
-      r2Folder,
-    );
-    const programNumber = Number(programId) || 0;
-    setChannelTitle(nextChannelTitle);
-    setItems(updatedItems);
-    setSqlText(buildSqlText(updatedItems, programNumber, language));
   };
 
   const applyChanges = () => {
@@ -187,7 +171,6 @@ const EpisodesPage = ({
       setProcess("오류 발생", "error");
       setChannelTitle("");
       setChannelOverride("");
-      setIsEditingChannel(false);
       setItems([]);
       setSqlText("");
       setOriginalSqlText("");
