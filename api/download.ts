@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 export default async function handler(
   request: VercelRequest,
-  response: VercelResponse
+  response: VercelResponse,
 ) {
   const { url: targetUrl } = request.query;
 
@@ -16,9 +16,7 @@ export default async function handler(
     if (!upstream.ok) {
       return response
         .status(upstream.status)
-        .send(
-          `Failed to download file: ${upstream.statusText}`
-        );
+        .send(`Failed to download file: ${upstream.statusText}`);
     }
 
     const contentType =

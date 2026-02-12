@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 export default async function handler(
   request: VercelRequest,
-  response: VercelResponse
+  response: VercelResponse,
 ) {
   const { url: targetUrl } = request.query;
 
@@ -22,14 +22,11 @@ export default async function handler(
     if (!upstream.ok) {
       return response
         .status(upstream.status)
-        .send(
-          `Failed to fetch RSS: ${upstream.statusText}`
-        );
+        .send(`Failed to fetch RSS: ${upstream.statusText}`);
     }
 
     const contentType =
-      upstream.headers.get("content-type") ||
-      "application/xml; charset=utf-8";
+      upstream.headers.get("content-type") || "application/xml; charset=utf-8";
     response.setHeader("Content-Type", contentType);
 
     const body = await upstream.text();
