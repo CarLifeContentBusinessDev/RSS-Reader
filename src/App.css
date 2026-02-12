@@ -764,7 +764,22 @@
   display: flex;
   align-items: center;
   gap: 1rem;
+  justify-content: space-between;
   flex-wrap: wrap;
+}
+
+.program-actions-left,
+.program-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.program-actions-left .ghost,
+.program-actions-right .ghost {
+  font-size: 0.95rem;
+  line-height: 1;
 }
 
 .span-2 {
