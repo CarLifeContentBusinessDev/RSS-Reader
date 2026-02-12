@@ -41,8 +41,9 @@ const ProgramsPage = ({
   const [programRssUrl, setProgramRssUrl] = useState("");
   const [programLanguage, setProgramLanguage] = useState("de");
   const [programType, setProgramType] = useState("podcast");
-  const [programImageFolder, setProgramImageFolder] =
-    useState(buildImageFolder("de"));
+  const [programImageFolder, setProgramImageFolder] = useState(
+    buildImageFolder("de"),
+  );
   const [programTitle, setProgramTitle] = useState("");
   const [programSubtitle, setProgramSubtitle] = useState("");
   const [programCategoryId, setProgramCategoryId] = useState<number | "">("");
