@@ -25,6 +25,11 @@ const LANGUAGE_OPTIONS = [
   { value: "it", label: "it (이탈리아)" },
 ];
 
+const TYPE_OPTIONS = [
+  { value: "podcast", label: "podcast" },
+  { value: "radio", label: "radio" },
+];
+
 const ProgramsPage = ({
   authUserEmail,
   onRequireLogin,
@@ -329,15 +334,12 @@ const ProgramsPage = ({
             />
           </label>
           <div className="field-row">
-            <label className="field">
-              <span>Type</span>
-              <input
-                type="text"
-                value={programType}
-                onChange={(event) => setProgramType(event.target.value)}
-                placeholder="type"
-              />
-            </label>
+            <SelectField
+              label="Type"
+              value={programType}
+              options={TYPE_OPTIONS}
+              onChange={setProgramType}
+            />
             <SelectField
               label="Language"
               value={programLanguage}
