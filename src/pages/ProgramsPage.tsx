@@ -36,6 +36,7 @@ const ProgramsPage = ({
   const [programIsLoading, setProgramIsLoading] = useState(false);
   const [programIsSending, setProgramIsSending] = useState(false);
   const [programError, setProgramError] = useState("");
+  const [programInsertResult, setProgramInsertResult] = useState("");
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [processState, setProcessState] = useState<{
     label: string;
@@ -97,6 +98,7 @@ const ProgramsPage = ({
     event.preventDefault();
     setProgramError("");
     setLogs([]);
+    setProgramInsertResult("");
     setProcess("RSS 요청 중", "working");
     setProgramIsLoading(true);
 
@@ -174,6 +176,7 @@ const ProgramsPage = ({
     }
     if (!programSqlText.trim()) return;
     setProgramError("");
+    setProgramInsertResult("");
     setProgramIsSending(true);
     setProcess("Supabase 전송 중", "working");
 
@@ -183,13 +186,22 @@ const ProgramsPage = ({
         `Supabase에 ${rowsToInsert.length}개 프로그램 전송 중...`,
         "action",
       );
-      const { error: insertError } = await supabase
+      const { data, error: insertError } = await supabase
         .from("programs")
-        .insert(rowsToInsert);
+        .insert(rowsToInsert)
+        .select("id");
       if (insertError) {
         throw insertError;
       }
       addLog("Supabase insert 완료.", "success");
+      if (data?.length) {
+        const ids = data
+          .map((row) => String(row.id))
+          .filter((value) => value !== "undefined" && value !== "null")
+          .join(", ");
+        addLog(`생성된 ID: ${ids}`, "success");
+        setProgramInsertResult(`program_id : ${ids}`);
+      }
       setProcess("Supabase 전송 완료", "success");
     } catch (err) {
       let message = "추가 실패";
@@ -206,6 +218,7 @@ const ProgramsPage = ({
         }
       }
       setProgramError(message);
+      setProgramInsertResult("");
       addLog(`Supabase insert 실패: ${message}`, "error");
       setProcess("Supabase 전송 실패", "error");
       showToast(message, "error");
@@ -355,6 +368,7 @@ const ProgramsPage = ({
                 setProgramOriginalSql("");
                 setProgramOriginal(null);
                 setProgramError("");
+                setProgramInsertResult("");
                 setLogs([]);
               }}
             >
@@ -383,6 +397,9 @@ const ProgramsPage = ({
             {processState.tone === "error" && "✗ 실패"}
             {processState.tone === "working" && "처리 중..."}
           </div>
+        )}
+        {programInsertResult && (
+          <div className="status status-success">{programInsertResult}</div>
         )}
       </section>
 
