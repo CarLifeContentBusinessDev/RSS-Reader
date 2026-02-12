@@ -26,6 +26,9 @@ const LANGUAGE_OPTIONS = [
   { value: "it", label: "it (이탈리아)" },
 ];
 
+const buildEpisodeFolder = (language: string) =>
+  `/${language || "de"}-episodes-audio/program`;
+
 const EpisodesPage = ({
   authUserEmail,
   onRequireLogin,
@@ -39,7 +42,7 @@ const EpisodesPage = ({
   const [channelTitle, setChannelTitle] = useState("");
   const [channelOverride, setChannelOverride] = useState("");
   const [isEditingChannel, setIsEditingChannel] = useState(false);
-  const [r2Folder, setR2Folder] = useState("/episodes-audio/program");
+  const [r2Folder, setR2Folder] = useState(buildEpisodeFolder("de"));
   const [items, setItems] = useState<ParsedItem[]>([]);
   const [sqlText, setSqlText] = useState("");
   const [originalSqlText, setOriginalSqlText] = useState("");
@@ -88,6 +91,10 @@ const EpisodesPage = ({
       showToast(`✗ ${processState.label}`, "error");
     }
   }, [processState.tone, processState.label]);
+
+  useEffect(() => {
+    setR2Folder(buildEpisodeFolder(language));
+  }, [language]);
 
   const updateProgress = (filename: string, value: number | null) => {
     setDownloadProgress((prev) => ({ ...prev, [filename]: value }));
@@ -384,15 +391,6 @@ const EpisodesPage = ({
               />
             </label>
           </div>
-          <label className="field">
-            <span>R2 폴더</span>
-            <input
-              type="text"
-              value={r2Folder}
-              onChange={(event) => setR2Folder(event.target.value)}
-              placeholder="/episodes-audio/program"
-            />
-          </label>
           <div className="actions">
             <button className="primary" type="submit" disabled={isLoading}>
               {isLoading ? "처리 중..." : "SQL 생성"}
@@ -403,9 +401,9 @@ const EpisodesPage = ({
               onClick={() => {
                 setRssUrl("");
                 setProgramId("0");
-                setLanguage("");
+                setLanguage("de");
                 setLimit("4");
-                setR2Folder("/de-episodes-audio/program");
+                setR2Folder(buildEpisodeFolder("de"));
                 setChannelTitle("");
                 setChannelOverride("");
                 setIsEditingChannel(false);
@@ -449,59 +447,8 @@ const EpisodesPage = ({
         <div className="panel-header">
           <div>
             <h2>에피소드 정보</h2>
-            <div className="channel-editor">
-              <div className="channel-row">
-                <span className="channel-prefix">채널 : </span>
-                {!isEditingChannel ? (
-                  <span className="channel-value">
-                    {channelTitle || "아직 불러온 피드가 없습니다."}
-                  </span>
-                ) : (
-                  <input
-                    className="channel-input"
-                    type="text"
-                    value={channelOverride}
-                    onChange={(event) => setChannelOverride(event.target.value)}
-                    placeholder="예: Eine Stunde History"
-                    disabled={!items.length}
-                  />
-                )}
-              </div>
-              <div className="channel-actions">
-                <button
-                  className="text-button"
-                  type="button"
-                  onClick={() => setIsEditingChannel((prev) => !prev)}
-                  disabled={!items.length}
-                >
-                  {isEditingChannel ? "수정 취소" : "편집"}
-                </button>
-                {isEditingChannel && (
-                  <button
-                    className="text-button"
-                    type="button"
-                    onClick={applyChannelOverride}
-                    disabled={!items.length}
-                  >
-                    일괄 적용
-                  </button>
-                )}
-                <button
-                  className="text-button"
-                  type="button"
-                  onClick={resetChannelOverride}
-                  disabled={!originalItems.length}
-                >
-                  원래대로
-                </button>
-              </div>
-            </div>
+            <p className="muted">RSS 파싱 결과</p>
           </div>
-          {downloadSummary.total > 0 && (
-            <div className="download-summary">
-              다운로드 {downloadSummary.completed}/{downloadSummary.total}
-            </div>
-          )}
           <div className="header-actions">
             <button className="ghost" onClick={handleCopy} disabled={!sqlText}>
               SQL 복사
@@ -525,6 +472,64 @@ const EpisodesPage = ({
 
         {items.length > 0 ? (
           <>
+            <label className="field">
+              <span>R2 폴더</span>
+              <input
+                type="text"
+                value={r2Folder}
+                onChange={(event) => setR2Folder(event.target.value)}
+                placeholder="/de-episodes-audio/program"
+              />
+            </label>
+            <div className="channel-editor">
+              <div className="channel-row">
+                <span className="channel-prefix">채널 : </span>
+                {!isEditingChannel ? (
+                  <span className="channel-value">
+                    {channelTitle || "아직 불러온 피드가 없습니다."}
+                  </span>
+                ) : (
+                  <input
+                    className="channel-input"
+                    type="text"
+                    value={channelOverride}
+                    onChange={(event) => setChannelOverride(event.target.value)}
+                    placeholder="예: Eine Stunde History"
+                  />
+                )}
+              </div>
+              <div className="channel-actions">
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={() => setIsEditingChannel((prev) => !prev)}
+                >
+                  {isEditingChannel ? "수정 취소" : "편집"}
+                </button>
+                {isEditingChannel && (
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={applyChannelOverride}
+                  >
+                    일괄 적용
+                  </button>
+                )}
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={resetChannelOverride}
+                  disabled={!originalItems.length}
+                >
+                  원래대로
+                </button>
+              </div>
+            </div>
+            {downloadSummary.total > 0 && (
+              <div className="download-summary">
+                다운로드 {downloadSummary.completed}/{downloadSummary.total}
+              </div>
+            )}
             <div className="items-grid">
               {items.map((item) => (
                 <article key={item.filename} className="item-card">
