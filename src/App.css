@@ -168,7 +168,8 @@
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 
-.field input {
+.field input,
+.field select {
   background: var(--surface);
   border: 1px solid var(--panel-border);
   color: var(--ink);
@@ -177,9 +178,110 @@
   font-size: 1rem;
 }
 
-.field input:focus {
+.field select {
+  appearance: none;
+  padding-right: 2.4rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='10' viewBox='0 0 16 10'%3E%3Cpath d='M2 2l6 6 6-6' fill='none' stroke='%234c5b5b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.9rem center;
+}
+
+.select {
+  position: relative;
+}
+
+.select-trigger {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--panel-border);
+  color: var(--ink);
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.select-trigger span {
+  color: var(--ink);
+}
+
+.select-caret {
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 7px solid var(--ink-muted);
+  transition: transform 0.2s ease;
+}
+
+.select.open .select-caret {
+  transform: rotate(180deg);
+}
+
+.select.open .select-trigger,
+.select-trigger:focus {
   outline: 2px solid var(--accent);
   border-color: transparent;
+  background: var(--surface);
+  box-shadow: 0 0 0 4px rgba(242, 201, 76, 0.25);
+}
+
+.select-menu {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  left: 0;
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  box-shadow: var(--panel-shadow);
+  padding: 0.35rem;
+  display: grid;
+  gap: 0.25rem;
+  z-index: 20;
+}
+
+.select-option {
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+  border-radius: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.select-option:hover {
+  background: #f6f4ef;
+}
+
+.select-option.selected {
+  background: var(--accent);
+  color: #111;
+}
+
+.field input:focus,
+.field select:focus {
+  outline: 2px solid var(--accent);
+  border-color: transparent;
+  background: var(--surface);
+  box-shadow: 0 0 0 4px rgba(242, 201, 76, 0.25);
+}
+
+.field select option {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.field select option:checked {
+  background: var(--accent);
+  color: #111;
 }
 
 .actions {

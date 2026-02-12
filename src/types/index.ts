@@ -14,6 +14,7 @@ export type ProgramRow = {
   type: string;
   language: string[];
   category_id?: number;
+  broadcasting_id?: number;
 };
 
 export type ParsedItem = {

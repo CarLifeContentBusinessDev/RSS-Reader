@@ -32,12 +32,20 @@ export const parseSqlToRows = (sqlText: string): EpisodeRow[] => {
 
 export const parseProgramSqlToRows = (sqlText: string): ProgramRow[] => {
   const rowPattern =
-    /\(\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*ARRAY\[\s*'((?:''|[^'])*)'\s*\](?:\s*,\s*(\d+|NULL))?\s*\)/g;
+    /\(\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*ARRAY\[\s*'((?:''|[^'])*)'\s*\](?:\s*,\s*(\d+|NULL))?(?:\s*,\s*(\d+|NULL))?\s*\)/g;
   const rows: ProgramRow[] = [];
 
   for (const match of sqlText.matchAll(rowPattern)) {
-    const [, titleRaw, subtitleRaw, imgRaw, typeRaw, language, categoryIdRaw] =
-      match;
+    const [
+      ,
+      titleRaw,
+      subtitleRaw,
+      imgRaw,
+      typeRaw,
+      language,
+      categoryIdRaw,
+      broadcastingIdRaw,
+    ] = match;
     const row: ProgramRow = {
       title: titleRaw.replace(/''/g, "'"),
       subtitle: subtitleRaw.replace(/''/g, "'"),
@@ -47,6 +55,9 @@ export const parseProgramSqlToRows = (sqlText: string): ProgramRow[] => {
     };
     if (categoryIdRaw && categoryIdRaw !== "NULL") {
       row.category_id = Number(categoryIdRaw);
+    }
+    if (broadcastingIdRaw && broadcastingIdRaw !== "NULL") {
+      row.broadcasting_id = Number(broadcastingIdRaw);
     }
     rows.push(row);
   }
@@ -79,6 +90,7 @@ export const buildProgramSqlText = (
   programType: string,
   language: string,
   categoryId?: number,
+  broadcastingId?: number,
 ) => {
   const safeTitle = program.title.replace(/'/g, "''");
   const safeSubtitle = program.subtitle.replace(/'/g, "''");
@@ -86,6 +98,7 @@ export const buildProgramSqlText = (
   const safeType = programType.replace(/'/g, "''");
 
   const categoryIdValue = categoryId ? `, ${categoryId}` : ", NULL";
+  const broadcastingIdValue = broadcastingId ? `, ${broadcastingId}` : ", NULL";
 
-  return `INSERT INTO programs\n  (title, subtitle, img_url, type, language, category_id)\nVALUES\n('${safeTitle}', '${safeSubtitle}', '${safeImgUrl}', '${safeType}', ARRAY['${language}']${categoryIdValue});`;
+  return `INSERT INTO programs\n  (title, subtitle, img_url, type, language, category_id, broadcasting_id)\nVALUES\n('${safeTitle}', '${safeSubtitle}', '${safeImgUrl}', '${safeType}', ARRAY['${language}']${categoryIdValue}${broadcastingIdValue});`;
 };
