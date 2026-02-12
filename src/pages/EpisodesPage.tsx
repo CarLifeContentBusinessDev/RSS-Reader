@@ -542,8 +542,21 @@ const EpisodesPage = ({
                 </div>
               </dl>
               <div className="item-links">
-                <a href={item.audioUrl} target="_blank" rel="noreferrer">
+                <a
+                  className="text-button"
+                  href={item.audioUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   원본 오디오
+                </a>
+                <a
+                  className="text-button"
+                  href={item.r2Url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  R2 확인
                 </a>
                 <button
                   className="link-button"
