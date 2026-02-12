@@ -16,14 +16,14 @@ type EpisodesPageProps = {
 };
 
 const LANGUAGE_OPTIONS = [
-  { value: "ko", label: "ko" },
-  { value: "en", label: "en" },
-  { value: "de", label: "de" },
-  { value: "jp", label: "jp" },
-  { value: "gb", label: "gb" },
-  { value: "fr", label: "fr" },
-  { value: "es", label: "es" },
-  { value: "it", label: "it" },
+  { value: "ko", label: "ko (한국)" },
+  { value: "en", label: "en (미국)" },
+  { value: "de", label: "de (독일)" },
+  { value: "jp", label: "jp (일본)" },
+  { value: "gb", label: "gb (영국)" },
+  { value: "fr", label: "fr (프랑스)" },
+  { value: "es", label: "es (스페인)" },
+  { value: "it", label: "it (이탈리아)" },
 ];
 
 const EpisodesPage = ({
@@ -39,7 +39,7 @@ const EpisodesPage = ({
   const [channelTitle, setChannelTitle] = useState("");
   const [channelOverride, setChannelOverride] = useState("");
   const [isEditingChannel, setIsEditingChannel] = useState(false);
-  const [r2Folder, setR2Folder] = useState("/de-episodes-audio/program");
+  const [r2Folder, setR2Folder] = useState("/episodes-audio/program");
   const [items, setItems] = useState<ParsedItem[]>([]);
   const [sqlText, setSqlText] = useState("");
   const [originalSqlText, setOriginalSqlText] = useState("");
@@ -390,7 +390,7 @@ const EpisodesPage = ({
               type="text"
               value={r2Folder}
               onChange={(event) => setR2Folder(event.target.value)}
-              placeholder="de-episodes-audio/program"
+              placeholder="/episodes-audio/program"
             />
           </label>
           <div className="actions">
