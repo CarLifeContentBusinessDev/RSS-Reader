@@ -448,7 +448,7 @@ const EpisodesPage = ({
       <section className="panel results">
         <div className="panel-header">
           <div>
-            <h2>파싱된 항목</h2>
+            <h2>에피소드 정보</h2>
             <div className="channel-editor">
               <div className="channel-row">
                 <span className="channel-prefix">채널 : </span>
@@ -523,104 +523,105 @@ const EpisodesPage = ({
           </div>
         </div>
 
-        <div className="items-grid">
-          {items.map((item) => (
-            <article key={item.filename} className="item-card">
-              <h3>{item.title}</h3>
-              <dl>
-                <div>
-                  <dt>날짜</dt>
-                  <dd>{item.date}</dd>
-                </div>
-                <div>
-                  <dt>길이</dt>
-                  <dd>{item.duration}</dd>
-                </div>
-                <div>
-                  <dt>파일명</dt>
-                  <dd>{item.filename}</dd>
-                </div>
-              </dl>
-              <div className="item-links">
-                <a
-                  className="text-button"
-                  href={item.audioUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  원본 오디오
-                </a>
-                <a
-                  className="text-button"
-                  href={item.r2Url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  R2 확인
-                </a>
-                <button
-                  className="link-button"
-                  type="button"
-                  onClick={() => downloadFile(item.audioUrl, item.filename)}
-                  disabled={!item.audioUrl}
-                >
-                  {downloadProgress[item.filename] != null
-                    ? `다운로드 ${downloadProgress[item.filename]}%`
-                    : "다운로드"}
-                </button>
-                <a href={item.r2Url} target="_blank" rel="noreferrer">
-                  R2 주소
-                </a>
-              </div>
-              {downloadProgress[item.filename] != null && (
-                <div className="download-progress">
-                  <div className="progress-bar">
-                    <span
-                      style={{
-                        width: `${downloadProgress[item.filename]}%`,
-                      }}
-                    />
+        {items.length > 0 ? (
+          <>
+            <div className="items-grid">
+              {items.map((item) => (
+                <article key={item.filename} className="item-card">
+                  <h3>{item.title}</h3>
+                  <dl>
+                    <div>
+                      <dt>날짜</dt>
+                      <dd>{item.date}</dd>
+                    </div>
+                    <div>
+                      <dt>길이</dt>
+                      <dd>{item.duration}</dd>
+                    </div>
+                    <div>
+                      <dt>파일명</dt>
+                      <dd>{item.filename}</dd>
+                    </div>
+                  </dl>
+                  <div className="item-links">
+                    <a
+                      className="text-button"
+                      href={item.audioUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      원본 오디오
+                    </a>
+                    <a
+                      className="text-button"
+                      href={item.r2Url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      R2 확인
+                    </a>
+                    <button
+                      className="link-button"
+                      type="button"
+                      onClick={() => downloadFile(item.audioUrl, item.filename)}
+                      disabled={!item.audioUrl}
+                    >
+                      {downloadProgress[item.filename] != null
+                        ? `다운로드 ${downloadProgress[item.filename]}%`
+                        : "다운로드"}
+                    </button>
+                    <a href={item.r2Url} target="_blank" rel="noreferrer">
+                      R2 주소
+                    </a>
                   </div>
-                  <span className="progress-text">
-                    {downloadProgress[item.filename]}%
-                  </span>
-                </div>
-              )}
-            </article>
-          ))}
-          {!items.length && (
-            <div className="empty">
-              피드를 실행하면 파싱된 항목이 표시됩니다.
+                  {downloadProgress[item.filename] != null && (
+                    <div className="download-progress">
+                      <div className="progress-bar">
+                        <span
+                          style={{
+                            width: `${downloadProgress[item.filename]}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="progress-text">
+                        {downloadProgress[item.filename]}%
+                      </span>
+                    </div>
+                  )}
+                </article>
+              ))}
             </div>
-          )}
-        </div>
 
-        <div className="sql-block">
-          <div className="sql-header">
-            <h3>SQL 출력</h3>
-            <div className="header-actions">
-              <button
-                className="ghost"
-                type="button"
-                onClick={() => {
-                  setSqlText(originalSqlText);
-                }}
-                disabled={!originalSqlText}
-              >
-                원본으로 되돌리기
-              </button>
-              <span className="muted">복사 전 편집 가능</span>
+            <div className="sql-block">
+              <div className="sql-header">
+                <h3>SQL 출력</h3>
+                <div className="header-actions">
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => {
+                      setSqlText(originalSqlText);
+                    }}
+                    disabled={!originalSqlText}
+                  >
+                    원본으로 되돌리기
+                  </button>
+                  <span className="muted">복사 전 편집 가능</span>
+                </div>
+              </div>
+              <textarea
+                value={sqlText}
+                onChange={(event) => setSqlText(event.target.value)}
+                placeholder="SQL이 여기에 표시됩니다."
+              />
+              <p className="hint">
+                SQL 편집 내용이 Supabase 전송 데이터에 반영됩니다.
+              </p>
             </div>
-          </div>
-          <textarea
-            value={sqlText}
-            onChange={(event) => setSqlText(event.target.value)}
-            placeholder="SQL이 여기에 표시됩니다."
-          />
-          <p className="hint">
-            SQL 편집 내용이 Supabase 전송 데이터에 반영됩니다.
-          </p>
-        </div>
+          </>
+        ) : (
+          <div className="empty">피드를 실행하면 파싱된 항목이 표시됩니다.</div>
+        )}
       </section>
     </>
   );
