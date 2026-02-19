@@ -332,16 +332,6 @@ const EpisodesPage = ({
             바로 전송할 수 있습니다.
           </p>
         </div>
-        <div className="hero-card">
-          <div className="metric">
-            <span className="metric-label">Storage</span>
-            <strong className="metric-value">R2 public URLs</strong>
-          </div>
-          <div className="metric">
-            <span className="metric-label">Mode</span>
-            <strong className="metric-value">Client-only</strong>
-          </div>
-        </div>
       </header>
 
       <section className="panel">
