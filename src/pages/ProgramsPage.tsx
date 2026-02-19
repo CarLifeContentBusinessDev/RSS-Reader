@@ -33,6 +33,20 @@ const TYPE_OPTIONS = [
 const buildImageFolder = (language: string) =>
   `/${language || "de"}_${DEFAULT_IMAGE_FOLDER}`;
 
+const panelClass =
+  "rounded-[26px] border border-panel-border bg-panel p-6 shadow-panel md:p-9";
+const formClass = "grid gap-6";
+const fieldClass = "grid gap-2 font-semibold";
+const fieldLabelClass = "text-[0.9rem] text-ink-muted";
+const inputClass =
+  "w-full rounded-xl border border-panel-border bg-surface px-3.5 py-3 text-base text-ink focus:border-transparent focus:outline-none focus:ring-4 focus:ring-[rgba(242,201,76,0.25)]";
+const primaryButtonClass =
+  "rounded-full border border-transparent bg-gradient-to-br from-accent to-accent-strong px-6 py-3 font-semibold text-[#111] shadow-primary transition-transform duration-200 hover:-translate-y-0.5 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60";
+const ghostButtonClass =
+  "rounded-full border border-panel-border bg-transparent px-6 py-3 font-semibold text-ink transition-transform duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60";
+const textButtonClass =
+  "text-[0.9rem] font-semibold text-accent-strong transition hover:text-accent";
+
 const ProgramsPage = ({
   authUserEmail,
   onRequireLogin,
@@ -319,29 +333,34 @@ const ProgramsPage = ({
 
   return (
     <>
-      <header className="hero">
+      <header className="grid gap-8 lg:grid-cols-2 lg:items-center">
         <div>
-          <p className="eyebrow">RSS → SQL + Supabase</p>
-          <h1>Program Builder</h1>
-          <p className="subhead">
+          <p className="mb-3 text-[0.85rem] uppercase tracking-[0.26em] text-ink-muted">
+            RSS → SQL + Supabase
+          </p>
+          <h1 className="mb-3 text-[clamp(2.6rem,4vw,4.2rem)]">
+            Program Builder
+          </h1>
+          <p className="text-[1.1rem] text-ink-muted">
             RSS에서 채널 정보를 가져와 programs 테이블에 추가합니다.
           </p>
         </div>
       </header>
 
-      <section className="panel">
-        <form className="form" onSubmit={handleProgramSubmit}>
-          <label className="field">
-            <span>RSS URL</span>
+      <section className={panelClass}>
+        <form className={formClass} onSubmit={handleProgramSubmit}>
+          <label className={fieldClass}>
+            <span className={fieldLabelClass}>RSS URL</span>
             <input
               type="url"
               value={programRssUrl}
               onChange={(event) => setProgramRssUrl(event.target.value)}
               placeholder="https://example.com/feed.rss"
               required
+              className={inputClass}
             />
           </label>
-          <div className="field-row">
+          <div className="grid gap-4 md:grid-cols-[repeat(auto-fit,minmax(160px,1fr))]">
             <SelectField
               label="Type"
               value={programType}
@@ -354,8 +373,8 @@ const ProgramsPage = ({
               options={LANGUAGE_OPTIONS}
               onChange={setProgramLanguage}
             />
-            <label className="field">
-              <span>Category ID</span>
+            <label className={fieldClass}>
+              <span className={fieldLabelClass}>Category ID</span>
               <input
                 type="number"
                 value={programCategoryId}
@@ -365,10 +384,11 @@ const ProgramsPage = ({
                   )
                 }
                 placeholder="선택사항"
+                className={inputClass}
               />
             </label>
-            <label className="field">
-              <span>Broadcasting ID</span>
+            <label className={fieldClass}>
+              <span className={fieldLabelClass}>Broadcasting ID</span>
               <input
                 type="number"
                 value={programBroadcastingId}
@@ -378,19 +398,20 @@ const ProgramsPage = ({
                   )
                 }
                 placeholder="선택사항"
+                className={inputClass}
               />
             </label>
           </div>
-          <div className="actions">
+          <div className="flex flex-wrap gap-3">
             <button
-              className="primary"
+              className={primaryButtonClass}
               type="submit"
               disabled={programIsLoading}
             >
               {programIsLoading ? "처리 중..." : "프로그램 불러오기"}
             </button>
             <button
-              className="ghost"
+              className={ghostButtonClass}
               type="button"
               onClick={() => {
                 setProgramRssUrl("");
@@ -415,15 +436,35 @@ const ProgramsPage = ({
             </button>
           </div>
         </form>
-        {programError && <div className="error">{programError}</div>}
+        {programError && (
+          <div className="mt-4 rounded-[16px] border border-[rgba(255,120,120,0.4)] bg-[rgba(255,120,120,0.18)] p-4 text-[#742b2b]">
+            {programError}
+          </div>
+        )}
         {logs.length > 0 && (
-          <div className="log-panel">
-            <div className="log-body" aria-live="polite">
-              <div className="log-list">
+          <div className="mt-6 grid gap-3 rounded-[18px] border border-panel-border bg-surface p-5">
+            <div
+              className="max-h-[260px] overflow-y-auto rounded-[16px] border border-[rgba(16,35,35,0.08)] bg-[#f6f4ef] p-4"
+              aria-live="polite"
+            >
+              <div className="grid gap-2.5">
                 {logs.map((log) => (
-                  <div key={log.id} className={`log-item ${log.tone}`}>
-                    <span className="log-dot" />
-                    <p>{log.message}</p>
+                  <div
+                    key={log.id}
+                    className="grid grid-cols-[14px_1fr] items-start gap-2.5 rounded-xl border border-[rgba(16,35,35,0.08)] bg-white p-3 shadow-[0_8px_16px_rgba(16,35,35,0.06)]"
+                  >
+                    <span
+                      className={`mt-1.5 h-2.5 w-2.5 rounded-full ${
+                        log.tone === "action"
+                          ? "bg-accent-strong"
+                          : log.tone === "success"
+                            ? "bg-[rgba(120,210,160,0.9)]"
+                            : log.tone === "error"
+                              ? "bg-[rgba(255,120,120,0.9)]"
+                              : "bg-[rgba(16,35,35,0.35)]"
+                      }`}
+                    />
+                    <p className="m-0 text-[0.9rem] text-ink">{log.message}</p>
                   </div>
                 ))}
               </div>
@@ -431,26 +472,36 @@ const ProgramsPage = ({
           </div>
         )}
         {processState.tone !== "idle" && (
-          <div className={`status status-${processState.tone}`}>
+          <div
+            className={`mt-4 rounded-[16px] border p-4 ${
+              processState.tone === "success"
+                ? "border-[rgba(120,210,160,0.45)] bg-[rgba(120,210,160,0.2)] text-[#245c3d]"
+                : processState.tone === "error"
+                  ? "border-[rgba(255,120,120,0.4)] bg-[rgba(255,120,120,0.18)] text-[#742b2b]"
+                  : "border-[rgba(242,201,76,0.4)] bg-[rgba(242,201,76,0.2)] text-[#6b4d00]"
+            }`}
+          >
             {processState.tone === "success" && "✓ 완료"}
             {processState.tone === "error" && "✗ 실패"}
             {processState.tone === "working" && "처리 중..."}
           </div>
         )}
         {programInsertResult && (
-          <div className="status status-success">{programInsertResult}</div>
+          <div className="mt-4 rounded-[16px] border border-[rgba(120,210,160,0.45)] bg-[rgba(120,210,160,0.2)] p-4 text-[#245c3d]">
+            {programInsertResult}
+          </div>
         )}
       </section>
 
-      <section className="panel results">
-        <div className="panel-header">
+      <section className={`${panelClass} grid gap-6`}>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h2>프로그램 정보</h2>
-            <p className="muted">RSS 채널 메타데이터</p>
+            <p className="text-ink-muted">RSS 채널 메타데이터</p>
           </div>
-          <div className="header-actions">
+          <div className="flex flex-wrap items-center gap-3">
             <button
-              className="ghost"
+              className={ghostButtonClass}
               type="button"
               onClick={handleProgramReset}
               disabled={!programOriginal}
@@ -458,7 +509,7 @@ const ProgramsPage = ({
               원래대로
             </button>
             <button
-              className="primary"
+              className={primaryButtonClass}
               onClick={handleProgramInsert}
               disabled={!programSqlText.trim() || programIsSending}
             >
@@ -469,39 +520,37 @@ const ProgramsPage = ({
 
         {programTitle ? (
           <>
-            <div className="program-grid">
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "1rem",
-                }}
-              >
-                <label className="field">
-                  <span>제목</span>
+            <div className="grid gap-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className={fieldClass}>
+                  <span className={fieldLabelClass}>제목</span>
                   <input
                     type="text"
                     value={programTitle}
                     onChange={(event) => setProgramTitle(event.target.value)}
+                    className={inputClass}
                   />
                 </label>
-                <label className="field">
-                  <span>부제</span>
+                <label className={fieldClass}>
+                  <span className={fieldLabelClass}>부제</span>
                   <input
                     type="text"
                     value={programSubtitle}
                     onChange={(event) => setProgramSubtitle(event.target.value)}
+                    className={inputClass}
                   />
                 </label>
               </div>
-              <div className="field readonly span-2">
-                <span>원본 이미지 URL</span>
-                <span className="readonly-value">
+              <div className="col-span-full grid gap-2">
+                <span className="text-[0.9rem] font-semibold text-ink-muted">
+                  원본 이미지 URL
+                </span>
+                <span className="rounded-xl border border-panel-border bg-surface p-3.5 text-[0.95rem] text-ink">
                   {programSourceImgUrl || "-"}
                 </span>
               </div>
-              <label className="field">
-                <span>R2 폴더</span>
+              <label className={fieldClass}>
+                <span className={fieldLabelClass}>R2 폴더</span>
                 <input
                   type="text"
                   value={programImageFolder}
@@ -509,12 +558,13 @@ const ProgramsPage = ({
                     setProgramImageFolder(event.target.value)
                   }
                   placeholder={buildImageFolder(programLanguage)}
+                  className={inputClass}
                 />
               </label>
-              <div className="program-actions span-2">
-                <div className="program-actions-left">
+              <div className="col-span-full flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-4">
                   <button
-                    className="ghost"
+                    className={ghostButtonClass}
                     type="button"
                     onClick={() => downloadImage(programSourceImgUrl)}
                     disabled={!programSourceImgUrl}
@@ -522,7 +572,7 @@ const ProgramsPage = ({
                     이미지 다운로드
                   </button>
                   <a
-                    className="ghost"
+                    className={ghostButtonClass}
                     href="https://bigconvert.11zon.com/ko/png-to-webp"
                     target="_blank"
                     rel="noreferrer"
@@ -530,7 +580,7 @@ const ProgramsPage = ({
                     webp 변환
                   </a>
                   <a
-                    className="ghost"
+                    className={ghostButtonClass}
                     href="https://imagecompressor.11zon.com/ko/compress-webp"
                     target="_blank"
                     rel="noreferrer"
@@ -539,7 +589,7 @@ const ProgramsPage = ({
                   </a>
                   {programSourceImgUrl && (
                     <a
-                      className="text-button"
+                      className={textButtonClass}
                       href={programSourceImgUrl}
                       target="_blank"
                       rel="noreferrer"
@@ -549,7 +599,7 @@ const ProgramsPage = ({
                   )}
                   {programImgUrl && (
                     <a
-                      className="text-button"
+                      className={textButtonClass}
                       href={programImgUrl}
                       target="_blank"
                       rel="noreferrer"
@@ -558,9 +608,9 @@ const ProgramsPage = ({
                     </a>
                   )}
                 </div>
-                <div className="program-actions-right">
+                <div className="flex flex-wrap items-center gap-4">
                   <button
-                    className="primary"
+                    className={primaryButtonClass}
                     type="button"
                     onClick={applyR2ImageUrl}
                     disabled={!programTitle}
@@ -571,23 +621,24 @@ const ProgramsPage = ({
               </div>
             </div>
 
-            <div className="sql-block">
-              <div className="sql-header">
+            <div className="grid gap-3 rounded-[18px] border border-panel-border bg-surface p-6">
+              <div className="flex items-center justify-between gap-4">
                 <h3>SQL 출력</h3>
-                <span className="muted">복사 전 편집 가능</span>
+                <span className="text-ink-muted">복사 전 편집 가능</span>
               </div>
               <textarea
+                className="min-h-[220px] rounded-[14px] border border-panel-border bg-[#0f1515] p-4 font-mono text-[0.9rem] text-[#e6f4f1]"
                 value={programSqlText}
                 onChange={(event) => setProgramSqlText(event.target.value)}
                 placeholder="SQL이 여기에 표시됩니다."
               />
-              <p className="hint">
+              <p className="m-0 text-[0.85rem] text-ink-muted">
                 SQL 편집 내용이 Supabase 전송 데이터에 반영됩니다.
               </p>
             </div>
           </>
         ) : (
-          <div className="empty">
+          <div className="rounded-[18px] border border-dashed border-panel-border p-8 text-center text-ink-muted">
             프로그램 RSS URL을 입력하고 프로그램 불러오기를 실행하면 결과가
             표시됩니다.
           </div>
