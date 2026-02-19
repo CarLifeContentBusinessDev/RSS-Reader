@@ -29,6 +29,22 @@ const LANGUAGE_OPTIONS = [
 const buildEpisodeFolder = (language: string) =>
   `/${language || "de"}-episodes-audio/program`;
 
+const panelClass =
+  "rounded-[26px] border border-panel-border bg-panel p-6 shadow-panel md:p-9";
+const formClass = "grid gap-6";
+const fieldClass = "grid gap-2 font-semibold";
+const fieldLabelClass = "text-[0.9rem] text-ink-muted";
+const inputClass =
+  "w-full rounded-xl border border-panel-border bg-surface px-3.5 py-3 text-base text-ink focus:border-transparent focus:outline-none focus:ring-4 focus:ring-[rgba(242,201,76,0.25)]";
+const primaryButtonClass =
+  "rounded-full border border-transparent bg-gradient-to-br from-accent to-accent-strong px-6 py-3 font-semibold text-[#111] shadow-primary transition-transform duration-200 hover:-translate-y-0.5 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60";
+const ghostButtonClass =
+  "rounded-full border border-panel-border bg-transparent px-6 py-3 font-semibold text-ink transition-transform duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60";
+const textButtonClass =
+  "text-[0.9rem] font-semibold text-accent-strong transition hover:text-accent disabled:cursor-not-allowed disabled:opacity-50";
+const linkButtonClass =
+  "text-[0.9rem] font-semibold text-accent-strong transition hover:text-accent disabled:cursor-not-allowed disabled:opacity-50";
+
 const EpisodesPage = ({
   authUserEmail,
   onRequireLogin,
@@ -323,38 +339,44 @@ const EpisodesPage = ({
 
   return (
     <>
-      <header className="hero">
+      <header className="grid gap-8 lg:grid-cols-2 lg:items-center">
         <div>
-          <p className="eyebrow">RSS → SQL + Supabase</p>
-          <h1>RSS Episode Builder</h1>
-          <p className="subhead">
+          <p className="mb-3 text-[0.85rem] uppercase tracking-[0.26em] text-ink-muted">
+            RSS → SQL + Supabase
+          </p>
+          <h1 className="mb-3 text-[clamp(2.6rem,4vw,4.2rem)]">
+            RSS Episode Builder
+          </h1>
+          <p className="text-[1.1rem] text-ink-muted">
             RSS 주소를 넣고 프로그램과 언어를 고르면 SQL을 만들거나 Supabase로
             바로 전송할 수 있습니다.
           </p>
         </div>
       </header>
 
-      <section className="panel">
-        <form className="form" onSubmit={handleSubmit}>
-          <label className="field">
-            <span>RSS URL</span>
+      <section className={panelClass}>
+        <form className={formClass} onSubmit={handleSubmit}>
+          <label className={fieldClass}>
+            <span className={fieldLabelClass}>RSS URL</span>
             <input
               type="url"
               value={rssUrl}
               onChange={(event) => setRssUrl(event.target.value)}
               placeholder="https://example.com/feed.rss"
               required
+              className={inputClass}
             />
           </label>
-          <div className="field-row">
-            <label className="field">
-              <span>Program ID</span>
+          <div className="grid gap-4 md:grid-cols-[repeat(auto-fit,minmax(160px,1fr))]">
+            <label className={fieldClass}>
+              <span className={fieldLabelClass}>Program ID</span>
               <input
                 type="number"
                 value={programId}
                 onChange={(event) => setProgramId(event.target.value)}
                 placeholder="000"
                 min={0}
+                className={inputClass}
               />
             </label>
             <SelectField
@@ -363,23 +385,28 @@ const EpisodesPage = ({
               options={LANGUAGE_OPTIONS}
               onChange={setLanguage}
             />
-            <label className="field">
-              <span>Limit</span>
+            <label className={fieldClass}>
+              <span className={fieldLabelClass}>Limit</span>
               <input
                 type="number"
                 value={limit}
                 onChange={(event) => setLimit(event.target.value)}
                 min={1}
                 max={50}
+                className={inputClass}
               />
             </label>
           </div>
-          <div className="actions">
-            <button className="primary" type="submit" disabled={isLoading}>
+          <div className="flex flex-wrap gap-3">
+            <button
+              className={primaryButtonClass}
+              type="submit"
+              disabled={isLoading}
+            >
               {isLoading ? "처리 중..." : "SQL 생성"}
             </button>
             <button
-              className="ghost"
+              className={ghostButtonClass}
               type="button"
               onClick={() => {
                 setRssUrl("");
@@ -401,15 +428,37 @@ const EpisodesPage = ({
             </button>
           </div>
         </form>
-        {error && <div className="error">{error}</div>}
+        {error && (
+          <div className="mt-4 rounded-[16px] border border-[rgba(255,120,120,0.4)] bg-[rgba(255,120,120,0.18)] p-4 text-[#742b2b]">
+            {error}
+          </div>
+        )}
         {logs.length > 0 && (
-          <div className="log-panel">
-            <div className="log-body" aria-live="polite">
-              <div className="log-list">
+          <div className="mt-6 grid gap-3 rounded-[18px] border border-panel-border bg-surface p-5">
+            <div
+              className="max-h-[260px] overflow-y-auto rounded-[16px] border border-[rgba(16,35,35,0.08)] bg-[#f6f4ef] p-4"
+              aria-live="polite"
+            >
+              <div className="grid gap-2.5">
                 {logs.map((entry) => (
-                  <div key={entry.id} className={`log-item ${entry.tone}`}>
-                    <span className="log-dot" />
-                    <p>{entry.message}</p>
+                  <div
+                    key={entry.id}
+                    className="grid grid-cols-[14px_1fr] items-start gap-2.5 rounded-xl border border-[rgba(16,35,35,0.08)] bg-white p-3 shadow-[0_8px_16px_rgba(16,35,35,0.06)]"
+                  >
+                    <span
+                      className={`mt-1.5 h-2.5 w-2.5 rounded-full ${
+                        entry.tone === "action"
+                          ? "bg-accent-strong"
+                          : entry.tone === "success"
+                            ? "bg-[rgba(120,210,160,0.9)]"
+                            : entry.tone === "error"
+                              ? "bg-[rgba(255,120,120,0.9)]"
+                              : "bg-[rgba(16,35,35,0.35)]"
+                      }`}
+                    />
+                    <p className="m-0 text-[0.9rem] text-ink">
+                      {entry.message}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -417,7 +466,15 @@ const EpisodesPage = ({
           </div>
         )}
         {processState.tone !== "idle" && (
-          <div className={`status status-${processState.tone}`}>
+          <div
+            className={`mt-4 rounded-[16px] border p-4 ${
+              processState.tone === "success"
+                ? "border-[rgba(120,210,160,0.45)] bg-[rgba(120,210,160,0.2)] text-[#245c3d]"
+                : processState.tone === "error"
+                  ? "border-[rgba(255,120,120,0.4)] bg-[rgba(255,120,120,0.18)] text-[#742b2b]"
+                  : "border-[rgba(242,201,76,0.4)] bg-[rgba(242,201,76,0.2)] text-[#6b4d00]"
+            }`}
+          >
             {processState.tone === "success" && "✓ 완료"}
             {processState.tone === "error" && "✗ 실패"}
             {processState.tone === "working" && "처리 중..."}
@@ -425,25 +482,29 @@ const EpisodesPage = ({
         )}
       </section>
 
-      <section className="panel results">
-        <div className="panel-header">
+      <section className={`${panelClass} grid gap-6`}>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h2>에피소드 정보</h2>
-            <p className="muted">RSS 파싱 결과</p>
+            <p className="text-ink-muted">RSS 파싱 결과</p>
           </div>
-          <div className="header-actions">
-            <button className="ghost" onClick={handleCopy} disabled={!sqlText}>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              className={ghostButtonClass}
+              onClick={handleCopy}
+              disabled={!sqlText}
+            >
               SQL 복사
             </button>
             <button
-              className="ghost"
+              className={ghostButtonClass}
               onClick={handleDownloadAll}
               disabled={!items.length}
             >
               mp3 전체 다운로드
             </button>
             <button
-              className="primary"
+              className={primaryButtonClass}
               onClick={handleInsert}
               disabled={!sqlText.trim() || isSending}
             >
@@ -454,45 +515,55 @@ const EpisodesPage = ({
 
         {items.length > 0 ? (
           <>
-            <div className="channel-editor">
-              <div className="channel-row">
-                <span className="channel-prefix">채널 : </span>
+            <div className="mt-4 grid items-center gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+              <div className="flex min-w-[min(320px,100%)] items-center gap-2">
+                <span className="text-[0.9rem] font-semibold text-ink-muted">
+                  채널 :
+                </span>
                 <input
-                  className="channel-input"
+                  className={`${inputClass} flex-1 min-w-[240px] md:min-w-[400px]`}
                   type="text"
                   value={channelOverride}
                   onChange={(event) => setChannelOverride(event.target.value)}
                   placeholder={channelTitle || "채널명"}
-                  style={{ flex: 1, minWidth: "400px" }}
                 />
               </div>
             </div>
             {downloadSummary.total > 0 && (
-              <div className="download-summary">
+              <div className="rounded-full bg-[rgba(16,35,35,0.08)] px-3 py-1 text-[0.85rem] font-semibold text-ink">
                 다운로드 {downloadSummary.completed}/{downloadSummary.total}
               </div>
             )}
-            <div className="items-grid">
+            <div className="grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
               {items.map((item) => (
-                <article key={item.filename} className="item-card">
-                  <h3>{item.title}</h3>
-                  <dl>
+                <article
+                  key={item.filename}
+                  className="grid gap-4 rounded-[18px] border border-panel-border bg-surface p-5 animate-fadeInUp"
+                >
+                  <h3 className="text-[1.05rem] font-semibold">{item.title}</h3>
+                  <dl className="grid gap-2.5">
                     <div>
-                      <dt>날짜</dt>
-                      <dd>{item.date}</dd>
+                      <dt className="text-[0.7rem] uppercase tracking-[0.12em] text-ink-muted">
+                        날짜
+                      </dt>
+                      <dd className="mt-1 font-semibold">{item.date}</dd>
                     </div>
                     <div>
-                      <dt>길이</dt>
-                      <dd>{item.duration}</dd>
+                      <dt className="text-[0.7rem] uppercase tracking-[0.12em] text-ink-muted">
+                        길이
+                      </dt>
+                      <dd className="mt-1 font-semibold">{item.duration}</dd>
                     </div>
                     <div>
-                      <dt>파일명</dt>
-                      <dd>{item.filename}</dd>
+                      <dt className="text-[0.7rem] uppercase tracking-[0.12em] text-ink-muted">
+                        파일명
+                      </dt>
+                      <dd className="mt-1 font-semibold">{item.filename}</dd>
                     </div>
                   </dl>
-                  <div className="item-links">
+                  <div className="flex flex-wrap items-center gap-4 text-[0.9rem]">
                     <a
-                      className="text-button"
+                      className={textButtonClass}
                       href={item.audioUrl}
                       target="_blank"
                       rel="noreferrer"
@@ -500,7 +571,7 @@ const EpisodesPage = ({
                       원본 오디오
                     </a>
                     <a
-                      className="text-button"
+                      className={textButtonClass}
                       href={item.r2Url}
                       target="_blank"
                       rel="noreferrer"
@@ -508,7 +579,7 @@ const EpisodesPage = ({
                       R2 확인
                     </a>
                     <button
-                      className="link-button"
+                      className={linkButtonClass}
                       type="button"
                       onClick={() => downloadFile(item.audioUrl, item.filename)}
                       disabled={!item.audioUrl}
@@ -519,15 +590,16 @@ const EpisodesPage = ({
                     </button>
                   </div>
                   {downloadProgress[item.filename] != null && (
-                    <div className="download-progress">
-                      <div className="progress-bar">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[rgba(16,35,35,0.1)]">
                         <span
+                          className="block h-full bg-gradient-to-br from-accent to-accent-strong transition-[width] duration-200"
                           style={{
                             width: `${downloadProgress[item.filename]}%`,
                           }}
                         />
                       </div>
-                      <span className="progress-text">
+                      <span className="min-w-[42px] text-right text-[0.8rem] text-ink-muted">
                         {downloadProgress[item.filename]}%
                       </span>
                     </div>
@@ -536,20 +608,21 @@ const EpisodesPage = ({
               ))}
             </div>
 
-            <div className="program-grid">
-              <label className="field" style={{ maxWidth: "500px" }}>
-                <span>R2 폴더</span>
+            <div className="grid gap-4">
+              <label className={`${fieldClass} max-w-[500px]`}>
+                <span className={fieldLabelClass}>R2 폴더</span>
                 <input
                   type="text"
                   value={r2Folder}
                   onChange={(event) => setR2Folder(event.target.value)}
                   placeholder="/de-episodes-audio/program"
+                  className={inputClass}
                 />
               </label>
-              <div className="program-actions span-2">
-                <div className="program-actions-left">
+              <div className="col-span-full flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-4">
                   <button
-                    className="ghost"
+                    className={ghostButtonClass}
                     type="button"
                     onClick={resetChannelOverride}
                     disabled={!originalItems.length}
@@ -557,9 +630,9 @@ const EpisodesPage = ({
                     원래대로
                   </button>
                 </div>
-                <div className="program-actions-right">
+                <div className="flex flex-wrap items-center gap-4">
                   <button
-                    className="primary"
+                    className={primaryButtonClass}
                     type="button"
                     onClick={applyChanges}
                   >
@@ -569,12 +642,12 @@ const EpisodesPage = ({
               </div>
             </div>
 
-            <div className="sql-block">
-              <div className="sql-header">
+            <div className="grid gap-3 rounded-[18px] border border-panel-border bg-surface p-6">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <h3>SQL 출력</h3>
-                <div className="header-actions">
+                <div className="flex flex-wrap items-center gap-3">
                   <button
-                    className="ghost"
+                    className={ghostButtonClass}
                     type="button"
                     onClick={() => {
                       setSqlText(originalSqlText);
@@ -583,21 +656,24 @@ const EpisodesPage = ({
                   >
                     원본으로 되돌리기
                   </button>
-                  <span className="muted">복사 전 편집 가능</span>
+                  <span className="text-ink-muted">복사 전 편집 가능</span>
                 </div>
               </div>
               <textarea
+                className="min-h-[220px] rounded-[14px] border border-panel-border bg-[#0f1515] p-4 font-mono text-[0.9rem] text-[#e6f4f1]"
                 value={sqlText}
                 onChange={(event) => setSqlText(event.target.value)}
                 placeholder="SQL이 여기에 표시됩니다."
               />
-              <p className="hint">
+              <p className="m-0 text-[0.85rem] text-ink-muted">
                 SQL 편집 내용이 Supabase 전송 데이터에 반영됩니다.
               </p>
             </div>
           </>
         ) : (
-          <div className="empty">피드를 실행하면 파싱된 항목이 표시됩니다.</div>
+          <div className="rounded-[18px] border border-dashed border-panel-border p-8 text-center text-ink-muted">
+            피드를 실행하면 파싱된 항목이 표시됩니다.
+          </div>
         )}
       </section>
     </>
