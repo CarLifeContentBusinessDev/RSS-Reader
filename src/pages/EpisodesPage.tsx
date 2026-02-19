@@ -339,7 +339,7 @@ const EpisodesPage = ({
 
   return (
     <>
-      <header className="grid gap-8 lg:grid-cols-2 lg:items-center">
+      <header className="grid gap-8 ">
         <div>
           <p className="mb-3 text-[0.85rem] uppercase tracking-[0.26em] text-ink-muted">
             RSS → SQL + Supabase
