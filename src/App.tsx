@@ -4,6 +4,7 @@ import { supabase } from "./lib/supabaseClient";
 import EpisodesPage from "./pages/EpisodesPage";
 import ProgramsPage from "./pages/ProgramsPage";
 import Sidebar from "./components/Sidebar";
+import TopBar from "./components/TopBar";
 import type { ToastTone } from "./types";
 
 const primaryButtonClass =
@@ -124,36 +125,15 @@ function App() {
       <Sidebar />
 
       <main className="flex flex-col gap-10 px-[clamp(1.5rem,4vw,4.5rem)] pb-16 pt-12">
-        <div className="flex justify-end">
-          <div className="flex items-center gap-3">
-            {authUserEmail ? (
-              <>
-                <span className="rounded-full border border-panel-border bg-surface px-3 py-1.5 text-[0.85rem] text-ink-muted">
-                  {authUserEmail}
-                </span>
-                <button
-                  className={ghostButtonClass}
-                  type="button"
-                  onClick={handleSignOut}
-                  disabled={isAuthBusy}
-                >
-                  {isAuthBusy ? "로그아웃 중..." : "로그아웃"}
-                </button>
-              </>
-            ) : (
-              <button
-                className={primaryButtonClass}
-                type="button"
-                onClick={() => {
-                  setAuthError("");
-                  setShowAuthModal(true);
-                }}
-              >
-                로그인
-              </button>
-            )}
-          </div>
-        </div>
+        <TopBar
+          authUserEmail={authUserEmail}
+          isAuthBusy={isAuthBusy}
+          onLogout={handleSignOut}
+          onLogin={() => {
+            setAuthError("");
+            setShowAuthModal(true);
+          }}
+        />
 
         <Routes>
           <Route
