@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DEFAULT_IMAGE_FOLDER } from "../config/constants";
 import { supabase } from "../lib/supabaseClient";
 import type { LogEntry, LogTone, ParsedProgram, ToastTone } from "../types";
@@ -69,6 +69,7 @@ const ProgramsPage = ({
     label: "대기 중",
     tone: "idle",
   });
+  const lastToastKeyRef = useRef<string | null>(null);
 
   const addLog = (message: string, tone: LogTone = "info") => {
     const timestamp = new Date().toLocaleTimeString();
@@ -88,9 +89,19 @@ const ProgramsPage = ({
   };
 
   useEffect(() => {
+    if (processState.tone !== "success" && processState.tone !== "error") {
+      return;
+    }
+
+    const toastKey = `${processState.tone}:${processState.label}`;
+    if (lastToastKeyRef.current === toastKey) {
+      return;
+    }
+
+    lastToastKeyRef.current = toastKey;
     if (processState.tone === "success") {
       showToast(`✓ ${processState.label}`, "success");
-    } else if (processState.tone === "error") {
+    } else {
       showToast(`✗ ${processState.label}`, "error");
     }
   }, [processState.tone, processState.label, showToast]);
@@ -315,16 +326,6 @@ const ProgramsPage = ({
           <p className="subhead">
             RSS에서 채널 정보를 가져와 programs 테이블에 추가합니다.
           </p>
-        </div>
-        <div className="hero-card">
-          <div className="metric">
-            <span className="metric-label">Storage</span>
-            <strong className="metric-value">R2 public URLs</strong>
-          </div>
-          <div className="metric">
-            <span className="metric-label">Mode</span>
-            <strong className="metric-value">Client Only</strong>
-          </div>
         </div>
       </header>
 
