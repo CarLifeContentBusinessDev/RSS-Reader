@@ -28,12 +28,18 @@ const AuthModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
+    <div
+      className="fixed inset-0 z-20 flex items-center justify-center bg-[rgba(9,12,12,0.5)] p-6"
+      onClick={onClose}
+    >
+      <div
+        className="grid w-full max-w-[420px] gap-4 rounded-[20px] border border-panel-border bg-panel p-6 shadow-panel"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-4">
           <h3>Supabase 로그인</h3>
           <button
-            className="icon-button"
+            className="rounded-full border border-panel-border bg-transparent px-3 py-1.5 text-sm font-semibold text-ink"
             type="button"
             onClick={onClose}
             aria-label="닫기"
@@ -41,30 +47,36 @@ const AuthModal = ({
             닫기
           </button>
         </div>
-        {authError && <div className="error auth-error">{authError}</div>}
+        {authError && (
+          <div className="rounded-[16px] border border-[rgba(255,120,120,0.4)] bg-[rgba(255,120,120,0.18)] p-4 text-[#742b2b]">
+            {authError}
+          </div>
+        )}
         {!authUserEmail ? (
-          <div className="modal-body">
-            <label className="field">
-              <span>이메일</span>
+          <div className="grid gap-4">
+            <label className="grid gap-2 font-semibold">
+              <span className="text-[0.9rem] text-ink-muted">이메일</span>
               <input
                 type="email"
                 value={authEmail}
                 onChange={(event) => onEmailChange(event.target.value)}
                 placeholder="you@example.com"
+                className="w-full rounded-xl border border-panel-border bg-surface px-3.5 py-3 text-base text-ink focus:border-transparent focus:outline-none focus:ring-4 focus:ring-[rgba(242,201,76,0.25)]"
               />
             </label>
-            <label className="field">
-              <span>비밀번호</span>
+            <label className="grid gap-2 font-semibold">
+              <span className="text-[0.9rem] text-ink-muted">비밀번호</span>
               <input
                 type="password"
                 value={authPassword}
                 onChange={(event) => onPasswordChange(event.target.value)}
                 placeholder="비밀번호"
+                className="w-full rounded-xl border border-panel-border bg-surface px-3.5 py-3 text-base text-ink focus:border-transparent focus:outline-none focus:ring-4 focus:ring-[rgba(242,201,76,0.25)]"
               />
             </label>
-            <div className="modal-actions">
+            <div className="flex justify-end">
               <button
-                className="primary"
+                className="rounded-full border border-transparent bg-gradient-to-br from-accent to-accent-strong px-6 py-3 font-semibold text-[#111] shadow-primary transition-transform duration-200 hover:-translate-y-0.5 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
                 type="button"
                 onClick={onSignIn}
                 disabled={isAuthBusy}
@@ -74,11 +86,11 @@ const AuthModal = ({
             </div>
           </div>
         ) : (
-          <div className="modal-body">
-            <p className="muted">로그인됨: {authUserEmail}</p>
-            <div className="modal-actions">
+          <div className="grid gap-4">
+            <p className="text-ink-muted">로그인됨: {authUserEmail}</p>
+            <div className="flex justify-end">
               <button
-                className="ghost"
+                className="rounded-full border border-panel-border bg-transparent px-6 py-3 font-semibold text-ink transition-transform duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
                 type="button"
                 onClick={onSignOut}
                 disabled={isAuthBusy}

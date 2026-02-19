@@ -1,11 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { Routes, Route } from "react-router-dom";
-import "./App.css";
 import { supabase } from "./lib/supabaseClient";
 import EpisodesPage from "./pages/EpisodesPage";
 import ProgramsPage from "./pages/ProgramsPage";
 import Sidebar from "./components/Sidebar";
 import type { ToastTone } from "./types";
+
+const primaryButtonClass =
+  "rounded-full border border-transparent bg-gradient-to-br from-accent to-accent-strong px-6 py-3 font-semibold text-[#111] shadow-primary transition-transform duration-200 hover:-translate-y-0.5 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60";
+const ghostButtonClass =
+  "rounded-full border border-panel-border bg-transparent px-6 py-3 font-semibold text-ink transition-transform duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60";
+const inputClass =
+  "w-full rounded-xl border border-panel-border bg-surface px-3.5 py-3 text-base text-ink focus:border-transparent focus:outline-none focus:ring-4 focus:ring-[rgba(242,201,76,0.25)]";
+const labelClass = "grid gap-2 font-semibold";
+const labelTextClass = "text-[0.9rem] text-ink-muted";
+const errorClass =
+  "rounded-[16px] border border-[rgba(255,120,120,0.4)] bg-[rgba(255,120,120,0.18)] p-4 text-[#742b2b]";
 
 function App() {
   const [authUserEmail, setAuthUserEmail] = useState<string | null>(null);
@@ -102,18 +112,27 @@ function App() {
     }
   };
 
+  const toastToneClass =
+    toastTone === "success"
+      ? "bg-[rgba(36,92,61,0.95)]"
+      : toastTone === "error"
+        ? "bg-[rgba(116,43,43,0.95)]"
+        : "bg-ink";
+
   return (
-    <div className="shell">
+    <div className="grid min-h-screen grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)]">
       <Sidebar />
 
-      <main className="app">
-        <div className="top-bar">
-          <div className="top-actions">
+      <main className="flex flex-col gap-10 px-[clamp(1.5rem,4vw,4.5rem)] pb-16 pt-12">
+        <div className="flex justify-end">
+          <div className="flex items-center gap-3">
             {authUserEmail ? (
               <>
-                <span className="user-chip">{authUserEmail}</span>
+                <span className="rounded-full border border-panel-border bg-surface px-3 py-1.5 text-[0.85rem] text-ink-muted">
+                  {authUserEmail}
+                </span>
                 <button
-                  className="ghost"
+                  className={ghostButtonClass}
                   type="button"
                   onClick={handleSignOut}
                   disabled={isAuthBusy}
@@ -123,7 +142,7 @@ function App() {
               </>
             ) : (
               <button
-                className="primary"
+                className={primaryButtonClass}
                 type="button"
                 onClick={() => {
                   setAuthError("");
@@ -169,20 +188,20 @@ function App() {
 
         {showAuthModal && (
           <div
-            className="modal-backdrop"
+            className="fixed inset-0 z-20 flex items-center justify-center bg-[rgba(9,12,12,0.5)] p-6"
             onClick={() => {
               setAuthError("");
               setShowAuthModal(false);
             }}
           >
             <div
-              className="modal-card"
+              className="grid w-full max-w-[420px] gap-4 rounded-[20px] border border-panel-border bg-panel p-6 shadow-panel"
               onClick={(event) => event.stopPropagation()}
             >
-              <div className="modal-header">
+              <div className="flex items-center justify-between gap-4">
                 <h3>Supabase 로그인</h3>
                 <button
-                  className="icon-button"
+                  className="rounded-full border border-panel-border bg-transparent px-3 py-1.5 text-sm font-semibold text-ink"
                   type="button"
                   onClick={() => {
                     setAuthError("");
@@ -193,30 +212,34 @@ function App() {
                   닫기
                 </button>
               </div>
-              {authError && <div className="error auth-error">{authError}</div>}
+              {authError && (
+                <div className={`${errorClass} mt-0`}>{authError}</div>
+              )}
               {!authUserEmail ? (
-                <div className="modal-body">
-                  <label className="field">
-                    <span>이메일</span>
+                <div className="grid gap-4">
+                  <label className={labelClass}>
+                    <span className={labelTextClass}>이메일</span>
                     <input
                       type="email"
                       value={authEmail}
                       onChange={(event) => setAuthEmail(event.target.value)}
                       placeholder="you@example.com"
+                      className={inputClass}
                     />
                   </label>
-                  <label className="field">
-                    <span>비밀번호</span>
+                  <label className={labelClass}>
+                    <span className={labelTextClass}>비밀번호</span>
                     <input
                       type="password"
                       value={authPassword}
                       onChange={(event) => setAuthPassword(event.target.value)}
                       placeholder="비밀번호"
+                      className={inputClass}
                     />
                   </label>
-                  <div className="modal-actions">
+                  <div className="flex justify-end">
                     <button
-                      className="primary"
+                      className={primaryButtonClass}
                       type="button"
                       onClick={handleSignIn}
                       disabled={isAuthBusy}
@@ -226,11 +249,11 @@ function App() {
                   </div>
                 </div>
               ) : (
-                <div className="modal-body">
-                  <p className="muted">로그인됨: {authUserEmail}</p>
-                  <div className="modal-actions">
+                <div className="grid gap-4">
+                  <p className="text-ink-muted">로그인됨: {authUserEmail}</p>
+                  <div className="flex justify-end">
                     <button
-                      className="ghost"
+                      className={ghostButtonClass}
                       type="button"
                       onClick={handleSignOut}
                       disabled={isAuthBusy}
@@ -245,7 +268,11 @@ function App() {
         )}
 
         {toastMessage && (
-          <div className={`toast ${toastTone}`}>{toastMessage}</div>
+          <div
+            className={`fixed left-1/2 top-6 z-30 -translate-x-1/2 rounded-full px-5 py-3 text-sm font-semibold text-[#f7fbfa] shadow-toast animate-toastIn ${toastToneClass}`}
+          >
+            {toastMessage}
+          </div>
         )}
       </main>
     </div>

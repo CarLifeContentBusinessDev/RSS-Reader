@@ -1,6 +1,7 @@
 import { Readable } from "node:stream";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 const rssProxy = (): Plugin => ({
   name: "rss-proxy",
@@ -89,5 +90,5 @@ const rssProxy = (): Plugin => ({
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), rssProxy()],
+  plugins: [tailwindcss(), react(), rssProxy()],
 });
