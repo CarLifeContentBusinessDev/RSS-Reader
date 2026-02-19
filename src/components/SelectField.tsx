@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 type SelectOption = {
   value: string;
@@ -14,12 +14,13 @@ type SelectFieldProps = {
 
 const SelectField = ({ label, value, options, onChange }: SelectFieldProps) => {
   const [open, setOpen] = useState(false);
+  const labelId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const selected =
     options.find((option) => option.value === value) ?? options[0];
 
   useEffect(() => {
-    const handleOutsideClick = (event: MouseEvent) => {
+    const handleOutsidePointerDown = (event: PointerEvent) => {
       if (!wrapperRef.current) return;
       if (!wrapperRef.current.contains(event.target as Node)) {
         setOpen(false);
@@ -32,31 +33,36 @@ const SelectField = ({ label, value, options, onChange }: SelectFieldProps) => {
       }
     };
 
-    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("pointerdown", handleOutsidePointerDown);
     document.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("pointerdown", handleOutsidePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
 
   return (
-    <label className="field">
-      <span>{label}</span>
+    <div className="field">
+      <span id={labelId}>{label}</span>
       <div className={`select ${open ? "open" : ""}`} ref={wrapperRef}>
         <button
           className="select-trigger"
           type="button"
           aria-haspopup="listbox"
           aria-expanded={open}
+          aria-labelledby={labelId}
           onClick={() => setOpen((prev) => !prev)}
         >
           <span>{selected?.label ?? value}</span>
           <span className="select-caret" aria-hidden="true" />
         </button>
         {open && (
-          <div className="select-menu" role="listbox">
+          <div
+            className="select-menu"
+            role="listbox"
+            onClick={() => setOpen(false)}
+          >
             {options.map((option) => {
               const isSelected = option.value === value;
               return (
@@ -78,7 +84,7 @@ const SelectField = ({ label, value, options, onChange }: SelectFieldProps) => {
           </div>
         )}
       </div>
-    </label>
+    </div>
   );
 };
 
