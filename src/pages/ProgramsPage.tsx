@@ -571,22 +571,6 @@ const ProgramsPage = ({
                   >
                     이미지 다운로드
                   </button>
-                  <a
-                    className={ghostButtonClass}
-                    href="https://bigconvert.11zon.com/ko/png-to-webp"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    webp 변환
-                  </a>
-                  <a
-                    className={ghostButtonClass}
-                    href="https://imagecompressor.11zon.com/ko/compress-webp"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    webp 압축
-                  </a>
                   {programSourceImgUrl && (
                     <a
                       className={textButtonClass}
