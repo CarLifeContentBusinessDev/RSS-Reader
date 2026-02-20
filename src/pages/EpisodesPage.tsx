@@ -105,7 +105,8 @@ const EpisodesPage = ({
     } else if (processState.tone === "error") {
       showToast(`✗ ${processState.label}`, "error");
     }
-  }, [processState.tone, processState.label, showToast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [processState.tone]);
 
   useEffect(() => {
     setR2Folder(buildEpisodeFolder(language));
