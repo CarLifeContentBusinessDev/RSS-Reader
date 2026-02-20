@@ -65,6 +65,14 @@ const Sidebar = () => {
           >
             mp3 압축
           </a>
+          <a
+            className="text-sm font-semibold text-accent-strong transition hover:text-accent "
+            href="https://dash.cloudflare.com/194031f1919f524b4ecbf1ad3c5f60f9/r2/default/buckets/pickle-demo"
+            target="_blank"
+            rel="noreferrer"
+          >
+            R2 object storage
+          </a>
         </div>
       </div>
     </aside>
