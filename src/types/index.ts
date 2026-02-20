@@ -24,6 +24,9 @@ export type ParsedItem = {
   duration: string;
   filename: string;
   r2Url: string;
+  // UI 상태 관리용(임시 필드)
+  _editingDuration?: boolean;
+  _editingDurationValue?: string;
 };
 
 export type ParsedProgram = {
