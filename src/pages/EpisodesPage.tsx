@@ -37,7 +37,7 @@ const fieldLabelClass = "text-[0.9rem] text-ink-muted";
 const inputClass =
   "w-full rounded-xl border border-panel-border bg-surface px-3.5 py-3 text-base text-ink focus:border-transparent focus:outline-none focus:ring-4 focus:ring-[rgba(242,201,76,0.25)]";
 const primaryButtonClass =
-  "rounded-full border border-transparent bg-gradient-to-br from-accent to-accent-strong px-6 py-3 font-semibold text-[#111] shadow-primary transition-transform duration-200 hover:-translate-y-0.5 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60";
+  "rounded-full border border-transparent bg-linear-to-br from-accent to-accent-strong px-6 py-3 font-semibold text-[#111] shadow-primary transition-transform duration-200 hover:-translate-y-0.5 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60";
 const ghostButtonClass =
   "rounded-full border border-panel-border bg-transparent px-6 py-3 font-semibold text-ink transition-transform duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60";
 const textButtonClass =
@@ -430,14 +430,14 @@ const EpisodesPage = ({
           </div>
         </form>
         {error && (
-          <div className="mt-4 rounded-[16px] border border-[rgba(255,120,120,0.4)] bg-[rgba(255,120,120,0.18)] p-4 text-[#742b2b]">
+          <div className="mt-4 rounded-2xl border border-[rgba(255,120,120,0.4)] bg-[rgba(255,120,120,0.18)] p-4 text-[#742b2b]">
             {error}
           </div>
         )}
         {logs.length > 0 && (
           <div className="mt-6 grid gap-3 rounded-[18px] border border-panel-border bg-surface p-5">
             <div
-              className="max-h-[260px] overflow-y-auto rounded-[16px] border border-[rgba(16,35,35,0.08)] bg-[#f6f4ef] p-4"
+              className="max-h-65 overflow-y-auto rounded-2xl border border-[rgba(16,35,35,0.08)] bg-[#f6f4ef] p-4"
               aria-live="polite"
             >
               <div className="grid gap-2.5">
@@ -468,7 +468,7 @@ const EpisodesPage = ({
         )}
         {processState.tone !== "idle" && (
           <div
-            className={`mt-4 rounded-[16px] border p-4 ${
+            className={`mt-4 rounded-2xl border p-4 ${
               processState.tone === "success"
                 ? "border-[rgba(120,210,160,0.45)] bg-[rgba(120,210,160,0.2)] text-[#245c3d]"
                 : processState.tone === "error"
@@ -522,7 +522,7 @@ const EpisodesPage = ({
                   채널 :
                 </span>
                 <input
-                  className={`${inputClass} flex-1 min-w-[240px] md:min-w-[400px]`}
+                  className={`${inputClass} flex-1 min-w-60 md:min-w-100`}
                   type="text"
                   value={channelOverride}
                   onChange={(event) => setChannelOverride(event.target.value)}
@@ -535,7 +535,7 @@ const EpisodesPage = ({
                 다운로드 {downloadSummary.completed}/{downloadSummary.total}
               </div>
             )}
-            <div className="grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+            <div className="grid gap-5 grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
               {items.map((item) => (
                 <article
                   key={item.filename}
@@ -594,13 +594,13 @@ const EpisodesPage = ({
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[rgba(16,35,35,0.1)]">
                         <span
-                          className="block h-full bg-gradient-to-br from-accent to-accent-strong transition-[width] duration-200"
+                          className="block h-full bg-linear-to-br from-accent to-accent-strong transition-[width] duration-200"
                           style={{
                             width: `${downloadProgress[item.filename]}%`,
                           }}
                         />
                       </div>
-                      <span className="min-w-[42px] text-right text-[0.8rem] text-ink-muted">
+                      <span className="min-w-10.5 text-right text-[0.8rem] text-ink-muted">
                         {downloadProgress[item.filename]}%
                       </span>
                     </div>
@@ -610,7 +610,7 @@ const EpisodesPage = ({
             </div>
 
             <div className="grid gap-4">
-              <label className={`${fieldClass} max-w-[500px]`}>
+              <label className={`${fieldClass} max-w-125`}>
                 <span className={fieldLabelClass}>R2 폴더</span>
                 <input
                   type="text"
@@ -661,7 +661,7 @@ const EpisodesPage = ({
                 </div>
               </div>
               <textarea
-                className="min-h-[220px] rounded-[14px] border border-panel-border bg-[#0f1515] p-4 font-mono text-[0.9rem] text-[#e6f4f1]"
+                className="min-h-55 rounded-[14px] border border-panel-border bg-[#0f1515] p-4 font-mono text-[0.9rem] text-[#e6f4f1]"
                 value={sqlText}
                 onChange={(event) => setSqlText(event.target.value)}
                 placeholder="SQL이 여기에 표시됩니다."
