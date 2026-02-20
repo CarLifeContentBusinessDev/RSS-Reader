@@ -1,6 +1,7 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+
 import type { LogEntry, LogTone, ParsedItem, ToastTone } from "../types";
 import SelectField from "../components/SelectField";
 import { buildItemsWithChannel } from "../utils/r2";
@@ -53,11 +54,11 @@ const EpisodesPage = ({
 }: EpisodesPageProps) => {
   const [rssUrl, setRssUrl] = useState("");
   const [programId, setProgramId] = useState("");
-  const [language, setLanguage] = useState("de");
+  const [language, setLanguage] = useState("ko");
   const [limit, setLimit] = useState("4");
   const [channelTitle, setChannelTitle] = useState("");
   const [channelOverride, setChannelOverride] = useState("");
-  const [r2Folder, setR2Folder] = useState(buildEpisodeFolder("de"));
+  const [r2Folder, setR2Folder] = useState(buildEpisodeFolder("ko"));
   const [items, setItems] = useState<ParsedItem[]>([]);
   const [sqlText, setSqlText] = useState("");
   const [originalSqlText, setOriginalSqlText] = useState("");
@@ -117,7 +118,16 @@ const EpisodesPage = ({
   };
 
   const applyChanges = () => {
-    const baseItems = originalItems.length ? originalItems : items;
+    // 파일명/길이 등 임시 편집값 반영
+    const mergedItems = items.map((item) => ({
+      ...item,
+      duration: item._editingDurationValue ?? item.duration,
+      _editingDuration: false,
+      _editingDurationValue: undefined,
+      _editingFilename: false,
+      _editingFilenameValue: undefined,
+    }));
+    const baseItems = mergedItems;
     const updatedItems = buildItemsWithChannel(
       baseItems,
       channelOverride.trim() || channelTitle,
@@ -550,16 +560,114 @@ const EpisodesPage = ({
                       <dd className="mt-1 font-semibold">{item.date}</dd>
                     </div>
                     <div>
-                      <dt className="text-[0.7rem] uppercase tracking-[0.12em] text-ink-muted">
+                      <dt className="text-[0.7rem] uppercase tracking-[0.12em] text-ink-muted flex items-center gap-2">
                         길이
+                        {originalItems.length > 0 &&
+                          originalItems.find(
+                            (ori) => ori.filename === item.filename,
+                          )?.duration !== item.duration && (
+                            <span className=" text-ink-muted text-xs font-semibold">
+                              수정됨
+                            </span>
+                          )}
                       </dt>
-                      <dd className="mt-1 font-semibold">{item.duration}</dd>
+                      <dd className="mt-1 font-semibold flex items-center gap-2">
+                        {item._editingDuration ? (
+                          <>
+                            <input
+                              type="text"
+                              className={
+                                inputClass +
+                                " w-24 min-w-0 max-w-1/2 px-2 text-base"
+                              }
+                              value={
+                                item._editingDurationValue ?? item.duration
+                              }
+                              autoFocus
+                              onChange={(e) => {
+                                const newVal = e.target.value;
+                                setItems((prev) =>
+                                  prev.map((it) =>
+                                    it.filename === item.filename
+                                      ? { ...it, _editingDurationValue: newVal }
+                                      : it,
+                                  ),
+                                );
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Escape") {
+                                  setItems((prev) =>
+                                    prev.map((it) =>
+                                      it.filename === item.filename
+                                        ? {
+                                            ...it,
+                                            _editingDuration: false,
+                                            _editingDurationValue: undefined,
+                                          }
+                                        : it,
+                                    ),
+                                  );
+                                }
+                              }}
+                            />
+                            <button
+                              type="button"
+                              className={textButtonClass}
+                              style={{ padding: 0, fontSize: "0.95em" }}
+                              onClick={() => {
+                                setItems((prev) =>
+                                  prev.map((it) =>
+                                    it.filename === item.filename
+                                      ? {
+                                          ...it,
+                                          duration:
+                                            it._editingDurationValue ??
+                                            it.duration,
+                                          _editingDuration: false,
+                                          _editingDurationValue: undefined,
+                                        }
+                                      : it,
+                                  ),
+                                );
+                              }}
+                            >
+                              확인
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span>{item.duration}</span>
+                            <button
+                              type="button"
+                              className={textButtonClass}
+                              style={{ padding: 0, fontSize: "0.95em" }}
+                              onClick={() => {
+                                setItems((prev) =>
+                                  prev.map((it) =>
+                                    it.filename === item.filename
+                                      ? {
+                                          ...it,
+                                          _editingDuration: true,
+                                          _editingDurationValue: it.duration,
+                                        }
+                                      : it,
+                                  ),
+                                );
+                              }}
+                            >
+                              편집
+                            </button>
+                          </>
+                        )}
+                      </dd>
                     </div>
                     <div>
-                      <dt className="text-[0.7rem] uppercase tracking-[0.12em] text-ink-muted">
+                      <dt className="text-[0.7rem] uppercase tracking-[0.12em] text-ink-muted flex items-center gap-2">
                         파일명
                       </dt>
-                      <dd className="mt-1 font-semibold">{item.filename}</dd>
+                      <dd className="mt-1 font-semibold flex items-center gap-2">
+                        <span>{item.filename}</span>
+                      </dd>
                     </div>
                   </dl>
                   <div className="flex flex-wrap items-center gap-4 text-[0.9rem]">
