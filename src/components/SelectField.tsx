@@ -68,7 +68,7 @@ const SelectField = ({ label, value, options, onChange }: SelectFieldProps) => {
         </button>
         {open && (
           <div
-            className="absolute left-0 top-[calc(100%+0.6rem)] z-20 grid w-full gap-1 rounded-[14px] border border-panel-border bg-surface p-1.5 shadow-panel"
+            className="absolute left-0 top-[calc(100%+0.6rem)] z-20 grid w-full gap-1 rounded-[14px] border border-panel-border bg-surface p-1.5 shadow-panel max-h-[260px] overflow-y-auto"
             role="listbox"
             onClick={() => setOpen(false)}
           >

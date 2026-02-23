@@ -51,3 +51,7 @@ export type ProcessState = {
   label: string;
   tone: ProcessTone;
 };
+
+export type CategoryOption = { value: string; label: string };
+
+export type BroadcastingOption = { value: string; label: string };
