@@ -2,7 +2,14 @@ import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { BASE_URL, DEFAULT_IMAGE_FOLDER } from "../config/constants";
 import { supabase } from "../lib/supabaseClient";
-import type { LogEntry, LogTone, ParsedProgram, ToastTone } from "../types";
+import type {
+  BroadcastingOption,
+  CategoryOption,
+  LogEntry,
+  LogTone,
+  ParsedProgram,
+  ToastTone,
+} from "../types";
 import SelectField from "../components/SelectField";
 import { buildR2ImageUrl, sanitizePathSegment } from "../utils/r2";
 import { parseProgramRss } from "../utils/rss";
@@ -85,6 +92,12 @@ const ProgramsPage = ({
     label: "대기 중",
     tone: "idle",
   });
+  const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
+  const [broadcastingOptions, setBroadcastingOptions] = useState<
+    BroadcastingOption[]
+  >([]);
+  const [optionsLoading, setOptionsLoading] = useState(false);
+
   const lastToastKeyRef = useRef<string | null>(null);
 
   const addLog = (message: string, tone: LogTone = "info") => {
@@ -295,6 +308,46 @@ const ProgramsPage = ({
     }
   };
 
+  useEffect(() => {
+    const fetchOptions = async () => {
+      setOptionsLoading(true);
+      try {
+        const [{ data: cats }, { data: broads }] = await Promise.all([
+          supabase
+            .from("categories")
+            .select("id, title")
+            .contains("language", [programLanguage])
+            .order("id"),
+          supabase
+            .from("broadcastings")
+            .select("id, title")
+            .contains("language", [programLanguage])
+            .order("id"),
+        ]);
+
+        setCategoryOptions(
+          (cats ?? []).map((row) => ({
+            value: String(row.id),
+            label: `${row.id} · ${row.title}`,
+          })),
+        );
+        setBroadcastingOptions(
+          (broads ?? []).map((row) => ({
+            value: String(row.id),
+            label: `${row.id} · ${row.title}`,
+          })),
+        );
+      } finally {
+        setOptionsLoading(false);
+      }
+      // language 바뀌면 선택값 초기화
+      setProgramCategoryId("");
+      setProgramBroadcastingId("");
+    };
+
+    fetchOptions();
+  }, [programLanguage]);
+
   const handleProgramReset = () => {
     if (!programOriginal) return;
     setProgramTitle(programOriginal.title);
@@ -395,34 +448,29 @@ const ProgramsPage = ({
               options={LANGUAGE_OPTIONS}
               onChange={setProgramLanguage}
             />
-            <label className={fieldClass}>
-              <span className={fieldLabelClass}>Category ID</span>
-              <input
-                type="number"
-                value={programCategoryId}
-                onChange={(event) =>
-                  setProgramCategoryId(
-                    event.target.value ? Number(event.target.value) : "",
-                  )
-                }
-                placeholder="선택사항"
-                className={inputClass}
-              />
-            </label>
-            <label className={fieldClass}>
-              <span className={fieldLabelClass}>Broadcasting ID</span>
-              <input
-                type="number"
-                value={programBroadcastingId}
-                onChange={(event) =>
-                  setProgramBroadcastingId(
-                    event.target.value ? Number(event.target.value) : "",
-                  )
-                }
-                placeholder="선택사항"
-                className={inputClass}
-              />
-            </label>
+            <SelectField
+              label={`Category ID${optionsLoading ? " (로딩 중...)" : ""}`}
+              value={programCategoryId === "" ? "" : String(programCategoryId)}
+              options={[{ value: "", label: "선택 안 함" }, ...categoryOptions]}
+              onChange={(val) =>
+                setProgramCategoryId(val === "" ? "" : Number(val))
+              }
+            />
+            <SelectField
+              label={`Broadcasting ID${optionsLoading ? " (로딩 중...)" : ""}`}
+              value={
+                programBroadcastingId === ""
+                  ? ""
+                  : String(programBroadcastingId)
+              }
+              options={[
+                { value: "", label: "선택 안 함" },
+                ...broadcastingOptions,
+              ]}
+              onChange={(val) =>
+                setProgramBroadcastingId(val === "" ? "" : Number(val))
+              }
+            />
           </div>
           <div className="flex flex-wrap gap-3">
             <button
