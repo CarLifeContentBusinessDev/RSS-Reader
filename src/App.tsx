@@ -75,7 +75,7 @@ function App() {
 
   const handleSignIn = async () => {
     if (!authEmail || !authPassword) {
-      setAuthError("이메일과 비밀번호를 입력해주세요.");
+      setAuthError("아이디와 비밀번호를 입력해주세요.");
       return;
     }
     setAuthError("");
@@ -198,12 +198,12 @@ function App() {
               {!authUserEmail ? (
                 <div className="grid gap-4">
                   <label className={labelClass}>
-                    <span className={labelTextClass}>이메일</span>
+                    <span className={labelTextClass}>아이디</span>
                     <input
                       type="email"
                       value={authEmail}
                       onChange={(event) => setAuthEmail(event.target.value)}
-                      placeholder="you@example.com"
+                      placeholder="아이디"
                       className={inputClass}
                     />
                   </label>
