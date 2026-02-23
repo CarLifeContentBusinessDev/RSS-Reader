@@ -217,6 +217,11 @@ const EpisodesPage = ({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!authUserEmail) {
+      showToast("로그인 후 불러올 수 있습니다.", "error");
+      onRequireLogin();
+      return;
+    }
     setError("");
     setStatus("");
     setLogs([]);
