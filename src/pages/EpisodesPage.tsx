@@ -417,18 +417,67 @@ const EpisodesPage = ({
 
   return (
     <>
-      <header className="grid gap-8 ">
+      <header className="flex gap-8 items-center">
         <div>
-          <p className="mb-3 text-[0.85rem] uppercase tracking-[0.26em] text-ink-muted">
-            RSS → SQL + Supabase
-          </p>
           <h1 className="mb-3 text-[clamp(2.6rem,4vw,4.2rem)]">
-            RSS Episode Builder
+            Episode Builder
           </h1>
           <p className="text-[1.1rem] text-ink-muted">
-            RSS 주소를 넣고 프로그램과 언어를 고르면 SQL을 만들거나 Supabase로
-            바로 전송할 수 있습니다.
+            RSS에서 에피소드 정보를 가져와 episodes 테이블에 추가합니다.
           </p>
+        </div>
+        <div className="flex-1">
+          <div className="bg-panel rounded-[22px] p-[1.9rem] grid gap-4 border border-panel-border shadow-panel animate-[floatIn_0.8s_ease-out]">
+            {[
+              {
+                step: "1",
+                text: "RSS URL, Program ID, Language, Limit 입력 - RSS와 Langueage 입력 후 Program ID 검색",
+                details: [
+                  "Program ID는 RSS의 채널명과 language를 기반으로 supabase에서 조회하며 직접 입력버튼을 통해 수동 입력도 가능",
+                  "Limit은 RSS에서 상단에서부터 가져올 에피소드 개수",
+                ],
+              },
+              {
+                step: "2",
+                text: "에피소드 불러오기 클릭 — RSS 채널 정보 파싱 후 SQL 자동 생성",
+              },
+              {
+                step: "3",
+                text: "정보 확인 및 수정 - mp3 전체 다운로드 → 압축 → 폴더 바로가기 → 업로드 → R2 확인으로 duration 비교 및 수정 → 변경 반영",
+                details: [
+                  "폴더 바로가기 후 프로그램명과 동일한 파일 생성 후 업로드",
+                ],
+              },
+              {
+                step: "4",
+                text: "Supabase로 전송 — SQL 출력 콘솔 기준으로 episodes 테이블에 insert",
+              },
+            ].map(({ step, text, details }) => (
+              <div key={step} className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-strong text-[0.7rem] font-bold text-[#111]">
+                  {step}
+                </span>
+                <div className="grid gap-1.5">
+                  <p className="m-0 text-[0.85rem] leading-relaxed text-ink-muted">
+                    {text}
+                  </p>
+                  {details && (
+                    <ul className="m-0 grid gap-1 pl-0">
+                      {details.map((d) => (
+                        <li
+                          key={d}
+                          className="flex items-start gap-2 text-[0.8rem] leading-relaxed text-ink-muted/70"
+                        >
+                          <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-ink-muted/40" />
+                          {d}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -524,7 +573,7 @@ const EpisodesPage = ({
               type="submit"
               disabled={isLoading}
             >
-              {isLoading ? "처리 중..." : "SQL 생성"}
+              {isLoading ? "처리 중..." : "에피소드 불러오기"}
             </button>
             <button
               className={ghostButtonClass}

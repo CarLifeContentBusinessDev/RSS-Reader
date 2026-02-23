@@ -408,17 +408,63 @@ const ProgramsPage = ({
 
   return (
     <>
-      <header className="grid gap-8 ">
+      <header className="flex gap-8 items-center">
         <div>
-          <p className="mb-3 text-[0.85rem] uppercase tracking-[0.26em] text-ink-muted">
-            RSS → SQL + Supabase
-          </p>
           <h1 className="mb-3 text-[clamp(2.6rem,4vw,4.2rem)]">
             Program Builder
           </h1>
           <p className="text-[1.1rem] text-ink-muted">
             RSS에서 채널 정보를 가져와 programs 테이블에 추가합니다.
           </p>
+        </div>
+        <div className="flex-1">
+          <div className="bg-panel rounded-[22px] p-[1.9rem] grid gap-4 border border-panel-border shadow-panel animate-[floatIn_0.8s_ease-out]">
+            {[
+              {
+                step: "1",
+                text: "RSS URL, Type, Language 입력 — Category / Broadcasting ID는 Language 기준으로 자동 조회 (선택 사항)",
+              },
+              {
+                step: "2",
+                text: "프로그램 불러오기 클릭 — RSS 채널 정보 파싱 후 SQL 자동 생성",
+              },
+              {
+                step: "3",
+                text: "정보 확인 및 수정 — 이미지 다운로드 → 변환/압축 → R2 폴더 바로가기 → 업로드 → R2 확인 → 변경 반영",
+                details: [
+                  "이미지 다운 실패 시 원본 보기 버튼으로 직접 다운로드",
+                ],
+              },
+              {
+                step: "4",
+                text: "Supabase로 전송 — SQL 출력 콘솔 기준으로 programs 테이블에 insert",
+              },
+            ].map(({ step, text, details }) => (
+              <div key={step} className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-strong text-[0.7rem] font-bold text-[#111]">
+                  {step}
+                </span>
+                <div className="grid gap-1.5">
+                  <p className="m-0 text-[0.85rem] leading-relaxed text-ink-muted">
+                    {text}
+                  </p>
+                  {details && (
+                    <ul className="m-0 grid gap-1 pl-0">
+                      {details.map((d) => (
+                        <li
+                          key={d}
+                          className="flex items-start gap-2 text-[0.8rem] leading-relaxed text-ink-muted/70"
+                        >
+                          <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-ink-muted/40" />
+                          {d}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </header>
 
