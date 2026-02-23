@@ -73,6 +73,14 @@ const Sidebar = () => {
           >
             R2 object storage
           </a>
+          <a
+            className="text-sm font-semibold text-accent-strong transition hover:text-accent "
+            href="https://supabase.com/dashboard/project/newreozzmyijevbnjwul"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Supabase
+          </a>
         </div>
       </div>
     </aside>
