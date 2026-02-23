@@ -28,7 +28,9 @@ const LANGUAGE_OPTIONS = [
 ];
 
 const buildEpisodeFolder = (language: string) =>
-  `/${language || "de"}-episodes-audio/program`;
+  language === "en"
+    ? "/en-episodes-audio/episodes"
+    : `/${language}-episodes-audio/episodes`;
 
 const panelClass =
   "rounded-[26px] border border-panel-border bg-panel p-6 shadow-panel md:p-9";
