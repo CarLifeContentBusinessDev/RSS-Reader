@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import type { LogEntry, LogTone, ParsedItem, ToastTone } from "../types";
 import SelectField from "../components/SelectField";
 import { buildItemsWithChannel } from "../utils/r2";
-import { parseRss } from "../utils/rss";
+import { parseProgramRss, parseRss } from "../utils/rss";
 import { buildSqlText, parseSqlToRows } from "../utils/sql";
 
 type EpisodesPageProps = {
@@ -84,6 +84,14 @@ const EpisodesPage = ({
     total: 0,
     completed: 0,
   });
+  const [programOptions, setProgramOptions] = useState<
+    { value: string; label: string }[]
+  >([]);
+  const [isProgramSearching, setIsProgramSearching] = useState(false);
+  const [programSearched, setProgramSearched] = useState(false);
+  const [programInputMode, setProgramInputMode] = useState<"input" | "select">(
+    "input",
+  );
 
   const addLog = (message: string, tone: LogTone = "info") => {
     const timestamp = new Date().toLocaleTimeString();
@@ -100,6 +108,63 @@ const EpisodesPage = ({
     tone: "idle" | "working" | "success" | "error",
   ) => {
     setProcessState({ label, tone });
+  };
+
+  const handleProgramSearch = async () => {
+    if (!rssUrl) return;
+    setIsProgramSearching(true);
+    setProgramSearched(false);
+    setProgramInputMode("select");
+    setProgramOptions([]);
+    setProgramId("");
+
+    try {
+      // RSS에서 채널 타이틀 추출
+      const response = await fetch(
+        `/api/rss?url=${encodeURIComponent(rssUrl)}`,
+      );
+      if (!response.ok) throw new Error(`RSS 요청 실패: ${response.status}`);
+      const xmlText = await response.text();
+
+      // 채널 타이틀만 빠르게 파싱 (parseProgramRss 또는 parseRss 재활용)
+      const parsed = parseProgramRss(xmlText); // title만 필요
+      const keyword = parsed.title.trim();
+
+      if (!keyword) throw new Error("RSS에서 채널 타이틀을 찾을 수 없습니다.");
+
+      // Supabase에서 조회
+      const { data, error } = await supabase
+        .from("programs")
+        .select("id, title")
+        .ilike("title", `%${keyword}%`)
+        .contains("language", [language])
+        .order("id");
+
+      if (error) throw error;
+
+      if (!data?.length) {
+        showToast(`'${keyword}' 검색 결과가 없습니다.`, "error");
+        return;
+      }
+
+      setProgramOptions(
+        data.map((row) => ({
+          value: String(row.id),
+          label: `${row.id} · ${row.title}`,
+        })),
+      );
+      // 결과가 1개면 자동 선택
+      if (data.length === 1) {
+        setProgramId(String(data[0].id));
+        showToast(`'${data[0].title}' 자동 선택됨`, "success");
+      }
+      setProgramSearched(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "검색 실패";
+      showToast(message, "error");
+    } finally {
+      setIsProgramSearching(false);
+    }
   };
 
   useEffect(() => {
@@ -381,17 +446,60 @@ const EpisodesPage = ({
             />
           </label>
           <div className="grid gap-4 md:grid-cols-[repeat(auto-fit,minmax(160px,1fr))]">
-            <label className={fieldClass}>
-              <span className={fieldLabelClass}>Program ID</span>
-              <input
-                type="number"
-                value={programId}
-                onChange={(event) => setProgramId(event.target.value)}
-                placeholder="000"
-                min={0}
-                className={inputClass}
-              />
-            </label>
+            <div className={fieldClass}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={fieldLabelClass}>Program ID</span>
+                {programSearched && programOptions.length > 0 && (
+                  <button
+                    type="button"
+                    className={textButtonClass}
+                    style={{ padding: 0, fontSize: "0.95em" }}
+                    onClick={() =>
+                      setProgramInputMode((prev) =>
+                        prev === "select" ? "input" : "select",
+                      )
+                    }
+                  >
+                    {programInputMode === "select" ? "직접 입력" : "검색 결과"}
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-2 items-center">
+                <div className="w-full">
+                  {programInputMode === "select" &&
+                  programOptions.length > 0 ? (
+                    <SelectField
+                      label=""
+                      value={programId}
+                      options={[
+                        { value: "", label: "선택하세요" },
+                        ...programOptions,
+                      ]}
+                      onChange={setProgramId}
+                      className="w-full"
+                    />
+                  ) : (
+                    <input
+                      type="number"
+                      value={programId}
+                      onChange={(e) => setProgramId(e.target.value)}
+                      placeholder="직접 입력 또는 검색"
+                      min={0}
+                      className={inputClass + " w-full"}
+                    />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className={ghostButtonClass}
+                  onClick={handleProgramSearch}
+                  disabled={!rssUrl || isProgramSearching}
+                  style={{ whiteSpace: "nowrap" }}
+                >
+                  {isProgramSearching ? "검색 중..." : "검색"}
+                </button>
+              </div>
+            </div>
             <SelectField
               label="Language"
               value={language}
