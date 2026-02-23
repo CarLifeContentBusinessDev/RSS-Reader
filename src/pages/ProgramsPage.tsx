@@ -1,6 +1,6 @@
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
-import { DEFAULT_IMAGE_FOLDER } from "../config/constants";
+import { BASE_URL, DEFAULT_IMAGE_FOLDER } from "../config/constants";
 import { supabase } from "../lib/supabaseClient";
 import type { LogEntry, LogTone, ParsedProgram, ToastTone } from "../types";
 import SelectField from "../components/SelectField";
@@ -31,7 +31,9 @@ const TYPE_OPTIONS = [
 ];
 
 const buildImageFolder = (language: string) =>
-  `/${language || "de"}_${DEFAULT_IMAGE_FOLDER}`;
+  language === "en"
+    ? "/eng_images/program"
+    : `/${language}_${DEFAULT_IMAGE_FOLDER}`;
 
 const panelClass =
   "rounded-[26px] border border-panel-border bg-panel p-6 shadow-panel md:p-9";
@@ -53,10 +55,10 @@ const ProgramsPage = ({
   showToast,
 }: ProgramsPageProps) => {
   const [programRssUrl, setProgramRssUrl] = useState("");
-  const [programLanguage, setProgramLanguage] = useState("de");
+  const [programLanguage, setProgramLanguage] = useState("ko");
   const [programType, setProgramType] = useState("podcast");
   const [programImageFolder, setProgramImageFolder] = useState(
-    buildImageFolder("de"),
+    buildImageFolder("ko"),
   );
   const [programTitle, setProgramTitle] = useState("");
   const [programSubtitle, setProgramSubtitle] = useState("");
@@ -127,8 +129,10 @@ const ProgramsPage = ({
   const updateProgramSqlFromFields = () => {
     const nextImgUrl = buildR2ImageUrl(
       programTitle,
-      programSourceImgUrl || programImgUrl,
+      BASE_URL,
       programImageFolder,
+      "webp",
+      programLanguage,
     );
     setProgramImgUrl(nextImgUrl);
     const nextProgram = {
@@ -172,10 +176,19 @@ const ProgramsPage = ({
       setProgramSourceImgUrl(parsed.imgUrl);
       const nextFolder = buildImageFolder(programLanguage);
       setProgramImageFolder(nextFolder);
+      // 원본 이미지에서 확장자 추출
+      let ext = "webp";
+      if (parsed.imgUrl) {
+        const urlName = parsed.imgUrl.split("/").pop()?.split("?")[0] || "";
+        const extCandidate = urlName.split(".").pop();
+        if (extCandidate && extCandidate.length <= 5) ext = extCandidate;
+      }
       const nextImgUrl = buildR2ImageUrl(
         parsed.title,
-        parsed.imgUrl,
+        BASE_URL,
         nextFolder,
+        ext,
+        programLanguage,
       );
       setProgramImgUrl(nextImgUrl);
       setProgramOriginal(parsed);
@@ -291,10 +304,19 @@ const ProgramsPage = ({
     setProgramSourceImgUrl(programOriginal.imgUrl);
     const nextFolder = buildImageFolder(programLanguage);
     setProgramImageFolder(nextFolder);
+    // 원본 이미지에서 확장자 추출
+    let ext = "webp";
+    if (programOriginal.imgUrl) {
+      const urlName =
+        programOriginal.imgUrl.split("/").pop()?.split("?")[0] || "";
+      const extCandidate = urlName.split(".").pop();
+      if (extCandidate && extCandidate.length <= 5) ext = extCandidate;
+    }
     const resetImgUrl = buildR2ImageUrl(
       programOriginal.title,
-      programOriginal.imgUrl,
+      BASE_URL,
       nextFolder,
+      ext,
     );
     setProgramImgUrl(resetImgUrl);
     setProgramSqlText(programOriginalSql);
@@ -437,14 +459,14 @@ const ProgramsPage = ({
           </div>
         </form>
         {programError && (
-          <div className="mt-4 rounded-[16px] border border-[rgba(255,120,120,0.4)] bg-[rgba(255,120,120,0.18)] p-4 text-[#742b2b]">
+          <div className="mt-4 rounded-2xl border border-[rgba(255,120,120,0.4)] bg-[rgba(255,120,120,0.18)] p-4 text-[#742b2b]">
             {programError}
           </div>
         )}
         {logs.length > 0 && (
           <div className="mt-6 grid gap-3 rounded-[18px] border border-panel-border bg-surface p-5">
             <div
-              className="max-h-[260px] overflow-y-auto rounded-[16px] border border-[rgba(16,35,35,0.08)] bg-[#f6f4ef] p-4"
+              className="max-h-65 overflow-y-auto rounded-2xl border border-[rgba(16,35,35,0.08)] bg-[#f6f4ef] p-4"
               aria-live="polite"
             >
               <div className="grid gap-2.5">
@@ -473,7 +495,7 @@ const ProgramsPage = ({
         )}
         {processState.tone !== "idle" && (
           <div
-            className={`mt-4 rounded-[16px] border p-4 ${
+            className={`mt-4 rounded-2xl border p-4 ${
               processState.tone === "success"
                 ? "border-[rgba(120,210,160,0.45)] bg-[rgba(120,210,160,0.2)] text-[#245c3d]"
                 : processState.tone === "error"
@@ -487,7 +509,7 @@ const ProgramsPage = ({
           </div>
         )}
         {programInsertResult && (
-          <div className="mt-4 rounded-[16px] border border-[rgba(120,210,160,0.45)] bg-[rgba(120,210,160,0.2)] p-4 text-[#245c3d]">
+          <div className="mt-4 rounded-2xl border border-[rgba(120,210,160,0.45)] bg-[rgba(120,210,160,0.2)] p-4 text-[#245c3d]">
             {programInsertResult}
           </div>
         )}
@@ -611,7 +633,7 @@ const ProgramsPage = ({
                 <span className="text-ink-muted">복사 전 편집 가능</span>
               </div>
               <textarea
-                className="min-h-[220px] rounded-[14px] border border-panel-border bg-[#0f1515] p-4 font-mono text-[0.9rem] text-[#e6f4f1]"
+                className="min-h-55 rounded-[14px] border border-panel-border bg-[#0f1515] p-4 font-mono text-[0.9rem] text-[#e6f4f1]"
                 value={programSqlText}
                 onChange={(event) => setProgramSqlText(event.target.value)}
                 placeholder="SQL이 여기에 표시됩니다."
