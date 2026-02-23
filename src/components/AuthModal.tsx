@@ -55,7 +55,7 @@ const AuthModal = ({
         {!authUserEmail ? (
           <div className="grid gap-4">
             <label className="grid gap-2 font-semibold">
-              <span className="text-[0.9rem] text-ink-muted">이메일</span>
+              <span className="text-[0.9rem] text-ink-muted">아이디</span>
               <input
                 type="email"
                 value={authEmail}
