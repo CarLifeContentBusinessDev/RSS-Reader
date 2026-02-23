@@ -10,9 +10,16 @@ type SelectFieldProps = {
   value: string;
   options: SelectOption[];
   onChange: (value: string) => void;
+  className?: string;
 };
 
-const SelectField = ({ label, value, options, onChange }: SelectFieldProps) => {
+const SelectField = ({
+  label,
+  value,
+  options,
+  onChange,
+  className,
+}: SelectFieldProps) => {
   const [open, setOpen] = useState(false);
   const labelId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -43,7 +50,7 @@ const SelectField = ({ label, value, options, onChange }: SelectFieldProps) => {
   }, []);
 
   return (
-    <div className="grid gap-2 font-semibold">
+    <div className={`grid gap-2 font-semibold ${className ?? ""}`}>
       <span id={labelId} className="text-[0.9rem] text-ink-muted">
         {label}
       </span>
