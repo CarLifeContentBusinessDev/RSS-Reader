@@ -78,8 +78,11 @@ export const buildSqlText = (
 
   const sqlLines = items.map((entry, index) => {
     const safeTitle = entry.title.replace(/'/g, "''");
+    const safeAudio = entry.r2Url.replace(/'/g, "''");
+    const safeDate = entry.date.replace(/'/g, "''");
+    const safeDuration = entry.duration.replace(/'/g, "''");
     const isLast = index === items.length - 1;
-    return `('${safeTitle}', ${programId}, '${entry.r2Url}', '${entry.date}', '${entry.duration}', ARRAY['${language}'])${isLast ? "" : ","}`;
+    return `('${safeTitle}', ${programId}, '${safeAudio}', '${safeDate}', '${safeDuration}', ARRAY['${language}'])${isLast ? "" : ","}`;
   });
 
   return `INSERT INTO episodes\n  (title, program_id, audio_file, date, duration, language)\nVALUES\n${sqlLines.join("\n")};`;
