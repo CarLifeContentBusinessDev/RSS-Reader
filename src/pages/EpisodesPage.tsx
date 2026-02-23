@@ -732,6 +732,14 @@ const EpisodesPage = ({
               </label>
               <div className="col-span-full flex flex-wrap items-center justify-between gap-4">
                 <div className="flex flex-wrap items-center gap-4">
+                  <a
+                    className={ghostButtonClass}
+                    href={`https://dash.cloudflare.com/194031f1919f524b4ecbf1ad3c5f60f9/r2/default/buckets/pickle-demo?prefix=${encodeURIComponent(r2Folder.replace(/^\/+/, ""))}%2F`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    폴더 바로가기
+                  </a>
                   <button
                     className={ghostButtonClass}
                     type="button"
