@@ -585,6 +585,14 @@ const ProgramsPage = ({
               </label>
               <div className="col-span-full flex flex-wrap items-center justify-between gap-4">
                 <div className="flex flex-wrap items-center gap-4">
+                  <a
+                    className={ghostButtonClass}
+                    href={`https://dash.cloudflare.com/?to=storage/r2/bucket/rss/${encodeURIComponent(programImageFolder.replace(/^\//, ""))}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    R2 폴더 바로가기
+                  </a>
                   <button
                     className={ghostButtonClass}
                     type="button"
@@ -593,6 +601,7 @@ const ProgramsPage = ({
                   >
                     이미지 다운로드
                   </button>
+
                   {programSourceImgUrl && (
                     <a
                       className={textButtonClass}
