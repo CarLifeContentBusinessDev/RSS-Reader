@@ -1,5 +1,27 @@
 import { NavLink } from "react-router-dom";
 
+const MENU_LINK = [
+  { name: "프로그램", href: "/" },
+  { name: "에피소드", href: "/episodes" },
+];
+
+const NAV_LINK = [
+  { name: "webp 변환", href: "https://bigconvert.11zon.com/ko/png-to-webp" },
+  {
+    name: "webp 압축",
+    href: "https://imagecompressor.11zon.com/ko/compress-webp",
+  },
+  { name: "mp3 압축", href: "https://freecompress.com/ko/compress-mp3" },
+  {
+    name: "Supabase",
+    href: "https://supabase.com/dashboard/project/newreozzmyijevbnjwul",
+  },
+  {
+    name: "R2 object storage",
+    href: "https://dash.cloudflare.com/194031f1919f524b4ecbf1ad3c5f60f9/r2/default/buckets/pickle-demo",
+  },
+];
+
 const Sidebar = () => {
   return (
     <aside className="border-b border-panel-border bg-white/60 px-6 py-10 backdrop-blur-md md:sticky md:top-0 md:h-screen md:self-start md:border-b-0 md:border-r">
@@ -11,76 +33,36 @@ const Sidebar = () => {
           <strong className="text-[1.2rem]">Builder</strong>
         </div>
         <nav className="mt-8 grid gap-2">
-          <NavLink
-            to="/programs"
-            className={({ isActive }) =>
-              `rounded-xl border px-3.5 py-2.5 font-semibold text-ink transition ${
-                isActive
-                  ? "border-panel-border bg-surface shadow-panel"
-                  : "border-transparent"
-              }`
-            }
-          >
-            프로그램
-          </NavLink>
-          <NavLink
-            to="/"
-            end
-            className={({ isActive }) =>
-              `rounded-xl border px-3.5 py-2.5 font-semibold text-ink transition ${
-                isActive
-                  ? "border-panel-border bg-surface shadow-panel"
-                  : "border-transparent"
-              }`
-            }
-          >
-            에피소드
-          </NavLink>
+          {MENU_LINK.map(({ name, href }) => (
+            <NavLink
+              key={href}
+              to={href}
+              className={({ isActive }) =>
+                `rounded-xl border px-3.5 py-2.5 font-semibold text-ink transition ${
+                  isActive
+                    ? "border-panel-border bg-surface shadow-panel"
+                    : "border-transparent"
+                }`
+              }
+            >
+              {name}
+            </NavLink>
+          ))}
         </nav>
         <div className="mt-auto grid gap-2 pt-8">
           <span className="text-xs font-semibold uppercase tracking-[0.2em] text-ink-muted">
             바로가기
           </span>
-          <a
-            className="text-sm font-semibold text-accent-strong transition hover:text-accent "
-            href="https://bigconvert.11zon.com/ko/png-to-webp"
-            target="_blank"
-            rel="noreferrer"
-          >
-            webp 변환
-          </a>
-          <a
-            className="text-sm font-semibold text-accent-strong transition hover:text-accent "
-            href="https://imagecompressor.11zon.com/ko/compress-webp"
-            target="_blank"
-            rel="noreferrer"
-          >
-            webp 압축
-          </a>
-          <a
-            className="text-sm font-semibold text-accent-strong transition hover:text-accent "
-            href="https://freecompress.com/ko/compress-mp3"
-            target="_blank"
-            rel="noreferrer"
-          >
-            mp3 압축
-          </a>
-          <a
-            className="text-sm font-semibold text-accent-strong transition hover:text-accent "
-            href="https://supabase.com/dashboard/project/newreozzmyijevbnjwul"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Supabase
-          </a>
-          <a
-            className="text-sm font-semibold text-accent-strong transition hover:text-accent "
-            href="https://dash.cloudflare.com/194031f1919f524b4ecbf1ad3c5f60f9/r2/default/buckets/pickle-demo"
-            target="_blank"
-            rel="noreferrer"
-          >
-            R2 object storage
-          </a>
+          {NAV_LINK.map(({ name, href }) => (
+            <a
+              className="text-sm font-semibold text-accent-strong transition hover:text-accent "
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {name}{" "}
+            </a>
+          ))}
         </div>
       </div>
     </aside>

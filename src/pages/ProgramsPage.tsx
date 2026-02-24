@@ -1,6 +1,7 @@
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
-import { BASE_URL, DEFAULT_IMAGE_FOLDER } from "../config/constants";
+import SelectField from "../components/SelectField";
+import { LANGUAGE_OPTIONS } from "../constants/language";
 import { supabase } from "../lib/supabaseClient";
 import type {
   BroadcastingOption,
@@ -10,10 +11,26 @@ import type {
   ParsedProgram,
   ToastTone,
 } from "../types";
-import SelectField from "../components/SelectField";
 import { buildR2ImageUrl, sanitizePathSegment } from "../utils/r2";
 import { parseProgramRss } from "../utils/rss";
 import { buildProgramSqlText, parseProgramSqlToRows } from "../utils/sql";
+import LogList from "../components/LogList";
+import SqlOutput from "../components/SqlOutput";
+import {
+  fieldClass,
+  fieldLabelClass,
+  formClass,
+  ghostButtonClass,
+  inputClass,
+  panelClass,
+  primaryButtonClass,
+  textButtonClass,
+} from "../constants/style";
+import {
+  BASE_URL,
+  DEFAULT_IMAGE_FOLDER,
+  TYPE_OPTIONS,
+} from "../constants/options";
 
 type ProgramsPageProps = {
   authUserEmail: string | null;
@@ -21,40 +38,10 @@ type ProgramsPageProps = {
   showToast: (message: string, tone?: ToastTone) => void;
 };
 
-const LANGUAGE_OPTIONS = [
-  { value: "ko", label: "ko (한국)" },
-  { value: "en", label: "en (미국)" },
-  { value: "de", label: "de (독일)" },
-  { value: "jp", label: "jp (일본)" },
-  { value: "gb", label: "gb (영국)" },
-  { value: "fr", label: "fr (프랑스)" },
-  { value: "es", label: "es (스페인)" },
-  { value: "it", label: "it (이탈리아)" },
-];
-
-const TYPE_OPTIONS = [
-  { value: "podcast", label: "podcast" },
-  { value: "radio", label: "radio" },
-];
-
 const buildImageFolder = (language: string) =>
   language === "en"
     ? "/eng_images/program"
     : `/${language}_${DEFAULT_IMAGE_FOLDER}`;
-
-const panelClass =
-  "rounded-[26px] border border-panel-border bg-panel p-6 shadow-panel md:p-9";
-const formClass = "grid gap-6";
-const fieldClass = "grid gap-2 font-semibold";
-const fieldLabelClass = "text-[0.9rem] text-ink-muted";
-const inputClass =
-  "w-full rounded-xl border border-panel-border bg-surface px-3.5 py-3 text-base text-ink focus:border-transparent focus:outline-none focus:ring-4 focus:ring-[rgba(242,201,76,0.25)]";
-const primaryButtonClass =
-  "rounded-full border border-transparent bg-linear-to-br from-accent to-accent-strong px-6 py-3 font-semibold text-[#111] shadow-primary transition-transform duration-200 hover:-translate-y-0.5 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60";
-const ghostButtonClass =
-  "rounded-full border border-panel-border bg-transparent px-6 py-3 font-semibold text-ink transition-transform duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60";
-const textButtonClass =
-  "text-[0.9rem] font-semibold text-accent-strong transition hover:text-accent";
 
 const ProgramsPage = ({
   authUserEmail,
@@ -85,12 +72,9 @@ const ProgramsPage = ({
   const [programError, setProgramError] = useState("");
   const [programInsertResult, setProgramInsertResult] = useState("");
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [processState, setProcessState] = useState<{
-    label: string;
-    tone: "idle" | "working" | "success" | "error";
-  }>({
+  const [processState, setProcessState] = useState({
     label: "대기 중",
-    tone: "idle",
+    tone: "idle" as "idle" | "working" | "success" | "error",
   });
   const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
   const [broadcastingOptions, setBroadcastingOptions] = useState<
@@ -562,36 +546,7 @@ const ProgramsPage = ({
             {programError}
           </div>
         )}
-        {logs.length > 0 && (
-          <div className="mt-6 grid gap-3 rounded-[18px] border border-panel-border bg-surface p-5">
-            <div
-              className="max-h-65 overflow-y-auto rounded-2xl border border-[rgba(16,35,35,0.08)] bg-[#f6f4ef] p-4"
-              aria-live="polite"
-            >
-              <div className="grid gap-2.5">
-                {logs.map((log) => (
-                  <div
-                    key={log.id}
-                    className="grid grid-cols-[14px_1fr] items-start gap-2.5 rounded-xl border border-[rgba(16,35,35,0.08)] bg-white p-3 shadow-[0_8px_16px_rgba(16,35,35,0.06)]"
-                  >
-                    <span
-                      className={`mt-1.5 h-2.5 w-2.5 rounded-full ${
-                        log.tone === "action"
-                          ? "bg-accent-strong"
-                          : log.tone === "success"
-                            ? "bg-[rgba(120,210,160,0.9)]"
-                            : log.tone === "error"
-                              ? "bg-[rgba(255,120,120,0.9)]"
-                              : "bg-[rgba(16,35,35,0.35)]"
-                      }`}
-                    />
-                    <p className="m-0 text-[0.9rem] text-ink">{log.message}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+        <LogList logs={logs} />
         {processState.tone !== "idle" && (
           <div
             className={`mt-4 rounded-2xl border p-4 ${
@@ -739,21 +694,10 @@ const ProgramsPage = ({
               </div>
             </div>
 
-            <div className="grid gap-3 rounded-[18px] border border-panel-border bg-surface p-6">
-              <div className="flex items-center justify-between gap-4">
-                <h3>SQL 출력</h3>
-                <span className="text-ink-muted">복사 전 편집 가능</span>
-              </div>
-              <textarea
-                className="min-h-55 rounded-[14px] border border-panel-border bg-[#0f1515] p-4 font-mono text-[0.9rem] text-[#e6f4f1]"
-                value={programSqlText}
-                onChange={(event) => setProgramSqlText(event.target.value)}
-                placeholder="SQL이 여기에 표시됩니다."
-              />
-              <p className="m-0 text-[0.85rem] text-ink-muted">
-                SQL 편집 내용이 Supabase 전송 데이터에 반영됩니다.
-              </p>
-            </div>
+            <SqlOutput
+              value={programSqlText}
+              onChange={(event) => setProgramSqlText(event.target.value)}
+            />
           </>
         ) : (
           <div className="rounded-[18px] border border-dashed border-panel-border p-8 text-center text-ink-muted">
