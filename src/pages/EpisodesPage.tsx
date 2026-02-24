@@ -438,15 +438,15 @@ const EpisodesPage = ({
             {[
               {
                 step: "1",
-                text: "RSS URL, Program ID, Language, Limit 입력 - RSS와 Langueage 입력 후 Program ID 검색",
+                text: "RSS URL, Language, Program ID, Limit 입력 - RSS와 Langueage 입력 후 Program ID 검색",
                 details: [
                   "Program ID는 RSS의 채널명과 language를 기반으로 supabase에서 조회하며 직접 입력버튼을 통해 수동 입력도 가능",
-                  "Limit은 RSS에서 상단에서부터 가져올 에피소드 개수",
+                  "Limit은 RSS에서 가져올 에피소드 개수 (최신순)",
                 ],
               },
               {
                 step: "2",
-                text: "에피소드 불러오기 클릭 — RSS 채널 정보 파싱 후 SQL 자동 생성",
+                text: "에피소드 불러오기 클릭 - RSS 채널 정보 파싱 후 SQL 자동 생성",
               },
               {
                 step: "3",
@@ -457,7 +457,7 @@ const EpisodesPage = ({
               },
               {
                 step: "4",
-                text: "Supabase로 전송 — SQL 출력 콘솔 기준으로 episodes 테이블에 insert",
+                text: "Supabase로 전송 - SQL 출력 콘솔 기준으로 episodes 테이블에 insert",
               },
             ].map(({ step, text, details }) => (
               <div key={step} className="flex items-start gap-3">
