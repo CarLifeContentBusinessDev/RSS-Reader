@@ -502,6 +502,14 @@ const EpisodesPage = ({
             />
           </label>
           <div className="grid gap-4 md:grid-cols-[repeat(auto-fit,minmax(160px,1fr))]">
+            <SelectField
+              label="Language"
+              value={language}
+              options={LANGUAGE_OPTIONS}
+              onChange={setLanguage}
+              className="mt-1"
+            />
+
             <div className={fieldClass}>
               <div className="flex items-center gap-2 mb-1">
                 <span className={fieldLabelClass}>Program ID</span>
@@ -556,12 +564,7 @@ const EpisodesPage = ({
                 </button>
               </div>
             </div>
-            <SelectField
-              label="Language"
-              value={language}
-              options={LANGUAGE_OPTIONS}
-              onChange={setLanguage}
-            />
+
             <label className={fieldClass}>
               <span className={fieldLabelClass}>Limit</span>
               <input
