@@ -139,6 +139,19 @@ function App() {
           <Route
             path="/"
             element={
+              <ProgramsPage
+                authUserEmail={authUserEmail}
+                onRequireLogin={() => {
+                  setAuthError("");
+                  setShowAuthModal(true);
+                }}
+                showToast={showToast}
+              />
+            }
+          />
+          <Route
+            path="/episodes"
+            element={
               <EpisodesPage
                 authUserEmail={authUserEmail}
                 onRequireLogin={() => {
@@ -148,19 +161,6 @@ function App() {
                 showToast={showToast}
                 status=""
                 setStatus={() => {}}
-              />
-            }
-          />
-          <Route
-            path="/programs"
-            element={
-              <ProgramsPage
-                authUserEmail={authUserEmail}
-                onRequireLogin={() => {
-                  setAuthError("");
-                  setShowAuthModal(true);
-                }}
-                showToast={showToast}
               />
             }
           />
@@ -175,7 +175,7 @@ function App() {
             }}
           >
             <div
-              className="grid w-full max-w-[420px] gap-4 rounded-[20px] border border-panel-border bg-panel p-6 shadow-panel"
+              className="grid w-full max-w-105 gap-4 rounded-[20px] border border-panel-border bg-panel p-6 shadow-panel"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between gap-4">
