@@ -1,4 +1,4 @@
-import { BASE_URL, ITUNES_NS } from "../config/constants";
+import { BASE_URL, ITUNES_NS } from "../constants/options";
 import type { ParsedItem, ParsedProgram } from "../types";
 import { formatDateYYMMDD, formatDuration } from "./format";
 import { buildItemsWithChannel } from "./r2";

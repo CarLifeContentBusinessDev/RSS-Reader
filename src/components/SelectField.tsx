@@ -1,14 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
+import type { SelectOptionType } from "../types/selectOption";
 
-type SelectOption = {
-  value: string;
-  label: string;
-};
-
-type SelectFieldProps = {
+export type SelectFieldProps = {
   label: string;
   value: string;
-  options: SelectOption[];
+  options: SelectOptionType[];
   onChange: (value: string) => void;
   className?: string;
 };

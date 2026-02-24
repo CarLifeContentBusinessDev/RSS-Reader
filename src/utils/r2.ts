@@ -1,4 +1,4 @@
-import { BASE_URL } from "../config/constants";
+import { BASE_URL } from "../constants/options";
 import type { ParsedItem } from "../types";
 
 export const sanitizePathSegment = (value: string) =>

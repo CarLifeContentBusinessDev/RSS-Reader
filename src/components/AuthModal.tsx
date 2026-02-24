@@ -33,7 +33,7 @@ const AuthModal = ({
       onClick={onClose}
     >
       <div
-        className="grid w-full max-w-[420px] gap-4 rounded-[20px] border border-panel-border bg-panel p-6 shadow-panel"
+        className="grid w-full max-w-105 gap-4 rounded-[20px] border border-panel-border bg-panel p-6 shadow-panel"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-4">
@@ -48,7 +48,7 @@ const AuthModal = ({
           </button>
         </div>
         {authError && (
-          <div className="rounded-[16px] border border-[rgba(255,120,120,0.4)] bg-[rgba(255,120,120,0.18)] p-4 text-[#742b2b]">
+          <div className="rounded-2xl border border-[rgba(255,120,120,0.4)] bg-[rgba(255,120,120,0.18)] p-4 text-[#742b2b]">
             {authError}
           </div>
         )}
