@@ -427,22 +427,22 @@ const ProgramsPage = ({
             {[
               {
                 step: "1",
-                text: "RSS URL, Type, Language 입력 — Category / Broadcasting ID는 Language 기준으로 자동 조회 (선택 사항)",
+                text: "RSS URL, Type, Language 입력 - Category / Broadcasting ID는 Language 기준으로 자동 조회 (선택 사항)",
               },
               {
                 step: "2",
-                text: "프로그램 불러오기 클릭 — RSS 채널 정보 파싱 후 SQL 자동 생성",
+                text: "프로그램 불러오기 클릭 - RSS 채널 정보 파싱 후 SQL 자동 생성",
               },
               {
                 step: "3",
-                text: "정보 확인 및 수정 — 이미지 다운로드 → 변환/압축 → R2 폴더 바로가기 → 업로드 → R2 확인 → 변경 반영",
+                text: "정보 확인 및 수정 - 이미지 다운로드 → 변환/압축 → R2 폴더 바로가기 → 업로드 → R2 확인 → 변경 반영",
                 details: [
                   "이미지 다운 실패 시 원본 보기 버튼으로 직접 다운로드",
                 ],
               },
               {
                 step: "4",
-                text: "Supabase로 전송 — SQL 출력 콘솔 기준으로 programs 테이블에 insert",
+                text: "Supabase로 전송 - SQL 출력 콘솔 기준으로 programs 테이블에 insert",
               },
             ].map(({ step, text, details }) => (
               <div key={step} className="flex items-start gap-3">
