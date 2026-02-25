@@ -34,7 +34,6 @@ export const EPISODE_GUIDE_STEPS = [
   {
     step: "3",
     text: "정보 확인 및 수정 - mp3 전체 다운로드 → 압축 → 폴더 바로가기 → 업로드 → R2 확인으로 duration 비교 및 수정 → 변경 반영",
-    details: ["폴더 바로가기 후 프로그램명과 동일한 파일 생성 후 업로드"],
   },
   {
     step: "4",
