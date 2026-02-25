@@ -28,7 +28,7 @@ function buildR2DashboardUrl(imageFolder: string): string {
   }
   return `https://dash.cloudflare.com/194031f1919f524b4ecbf1ad3c5f60f9/r2/default/buckets/pickle-demo?prefix=${encodeURIComponent(
     imageFolder.replace(/^\//, ""),
-  )}`;
+  )}%2F`;
 }
 
 export function ProgramInfoEditor({
