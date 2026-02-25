@@ -6,6 +6,18 @@ export const BASE_URL = "https://pub-a45bc992c0594356a8d32a71510a246b.r2.dev";
 export const DEFAULT_IMAGE_FOLDER = "images/program";
 export const ITUNES_NS = "http://www.itunes.com/dtds/podcast-1.0.dtd";
 
+export const DEFAUKLT_LANGUAGE = "ko";
+
+export const buildImageFolder = (language: string) =>
+  language === "en" ? "/eng_images/program" : `/${language}_images/program`;
+
+export const buildEpisodeFolder = (language: string) =>
+  language === "en"
+    ? "/en-episodes-audio/episodes"
+    : language === "jp"
+      ? "/jp_episodes-audio"
+      : `/${language}-episodes-audio/episodes`;
+
 export const EPISODE_GUIDE_STEPS = [
   {
     step: "1",

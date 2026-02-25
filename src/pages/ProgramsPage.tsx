@@ -1,26 +1,28 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
-import type { ToastTone } from "../types";
-import LogList from "../components/LogList";
 import SqlOutput from "../components/SqlOutput";
 import {
   ghostButtonClass,
   panelClass,
   primaryButtonClass,
 } from "../constants/style";
-
+import type { ToastTone } from "../types";
+import { useAuthGuard } from "../hooks/useAuthGuard";
+import { useImageDownload } from "../hooks/useImageDownload";
 import { useProcessLog } from "../hooks/useProcessLog";
 import { useProgramFetch } from "../hooks/useProgramFetch";
 import { useProgramOptions } from "../hooks/useProgramOptions";
-import { useImageDownload } from "../hooks/useImageDownload";
-
+import { GuidePanel } from "../components/GuidePanel";
+import { ProcessStatus } from "../components/ProcessStatus";
 import { ProgramFetchForm } from "../components/ProgramFetchForm";
 import { ProgramInfoEditor } from "../components/ProgramInfoEditor";
-import { GuidePanel } from "../components/GuidePanel";
-import { PROGRAM_GUIDE_STEPS } from "../constants/options";
-
-const buildImageFolder = (language: string) =>
-  language === "en" ? "/eng_images/program" : `/${language}_images/program`;
+import {
+  buildImageFolder,
+  DEFAUKLT_LANGUAGE,
+  PROGRAM_GUIDE_STEPS,
+} from "../constants/options";
+import { MESSAGES } from "../constants/message";
+import { LABELS } from "../constants/labels";
 
 interface ProgramsPageProps {
   authUserEmail: string | null;
@@ -34,11 +36,12 @@ const ProgramsPage = ({
   showToast,
 }: ProgramsPageProps) => {
   const [rssUrl, setRssUrl] = useState("");
-  const [language, setLanguage] = useState("ko");
+  const [language, setLanguage] = useState(DEFAUKLT_LANGUAGE);
   const [type, setType] = useState("podcast");
-  const [imageFolder, setImageFolder] = useState(buildImageFolder("ko"));
+  const [imageFolder, setImageFolder] = useState(
+    buildImageFolder(DEFAUKLT_LANGUAGE),
+  );
 
-  // language 변경 시 이미지 폴더 자동 갱신
   useEffect(() => {
     setImageFolder(buildImageFolder(language));
   }, [language]);
@@ -46,6 +49,8 @@ const ProgramsPage = ({
   const { logs, processState, addLog, setProcess, clearLogs } = useProcessLog({
     showToast,
   });
+
+  const { guard } = useAuthGuard({ authUserEmail, onRequireLogin, showToast });
 
   const {
     categoryOptions,
@@ -65,7 +70,6 @@ const ProgramsPage = ({
     sourceImgUrl,
     sqlText,
     original,
-    insertResult,
     error,
     isLoading,
     isSending,
@@ -92,39 +96,23 @@ const ProgramsPage = ({
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!authUserEmail) {
-      showToast("로그인 후 불러올 수 있습니다.", "error");
-      onRequireLogin();
-      return;
-    }
-    clearLogs();
-    fetchProgram(rssUrl);
+    guard(MESSAGES.LOGIN_REQUIRED_FETCH, () => {
+      clearLogs();
+      fetchProgram(rssUrl);
+    });
   };
 
   const handleInsert = () => {
-    if (!authUserEmail) {
-      showToast("로그인 후 전송할 수 있습니다.", "error");
-      onRequireLogin();
-      return;
-    }
-    insertToSupabase();
+    guard(MESSAGES.LOGIN_REQUIRED_SEND, () => insertToSupabase());
   };
 
   const handleReset = () => {
     setRssUrl("");
     setType("podcast");
-    setLanguage("de");
-    setImageFolder(buildImageFolder("de"));
+    setLanguage(DEFAUKLT_LANGUAGE);
+    setImageFolder(buildImageFolder(DEFAUKLT_LANGUAGE));
     resetFields();
     clearLogs();
-  };
-
-  const handleResetToOriginal = () => {
-    resetToOriginal(imageFolder, resetSelects);
-  };
-
-  const handleApply = () => {
-    rebuildSql(imageFolder);
   };
 
   return (
@@ -133,10 +121,10 @@ const ProgramsPage = ({
       <header className="flex gap-8 items-center">
         <div>
           <h1 className="mb-3 text-[clamp(2.6rem,4vw,4.2rem)]">
-            Program Builder
+            {LABELS.PAGE.PROGRAM.TITLE}
           </h1>
           <p className="text-[1.1rem] text-ink-muted">
-            RSS에서 채널 정보를 가져와 programs 테이블에 추가합니다.
+            {LABELS.PAGE.PROGRAM.DESCRIPTION}
           </p>
         </div>
         <GuidePanel guide_steps={PROGRAM_GUIDE_STEPS} />
@@ -163,63 +151,33 @@ const ProgramsPage = ({
           onReset={handleReset}
         />
 
-        {/* 에러 배너 */}
-        {error && (
-          <div className="mt-4 rounded-2xl border border-[rgba(255,120,120,0.4)] bg-[rgba(255,120,120,0.18)] p-4 text-[#742b2b]">
-            {error}
-          </div>
-        )}
-
-        {/* 로그 */}
-        <LogList logs={logs} />
-
-        {/* 프로세스 상태 배너 */}
-        {processState.tone !== "idle" && (
-          <div
-            className={`mt-4 rounded-2xl border p-4 ${
-              processState.tone === "success"
-                ? "border-[rgba(120,210,160,0.45)] bg-[rgba(120,210,160,0.2)] text-[#245c3d]"
-                : processState.tone === "error"
-                  ? "border-[rgba(255,120,120,0.4)] bg-[rgba(255,120,120,0.18)] text-[#742b2b]"
-                  : "border-[rgba(242,201,76,0.4)] bg-[rgba(242,201,76,0.2)] text-[#6b4d00]"
-            }`}
-          >
-            {processState.tone === "success" && "✓ 완료"}
-            {processState.tone === "error" && "✗ 실패"}
-            {processState.tone === "working" && "처리 중..."}
-          </div>
-        )}
-
-        {/* Insert 결과 */}
-        {insertResult && (
-          <div className="mt-4 rounded-2xl border border-[rgba(120,210,160,0.45)] bg-[rgba(120,210,160,0.2)] p-4 text-[#245c3d]">
-            {insertResult}
-          </div>
-        )}
+        <ProcessStatus logs={logs} processState={processState} error={error} />
       </section>
 
       {/* 프로그램 정보 패널 */}
       <section className={`${panelClass} grid gap-6`}>
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2>프로그램 정보</h2>
-            <p className="text-ink-muted">RSS 채널 메타데이터</p>
+            <h2>{LABELS.SECTION.PROGRAM_INFO.TITLE}</h2>
+            <p className="text-ink-muted">
+              {LABELS.SECTION.PROGRAM_INFO.DESCRIPTION}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <button
               className={ghostButtonClass}
               type="button"
-              onClick={handleResetToOriginal}
+              onClick={() => resetToOriginal(imageFolder, resetSelects)}
               disabled={!original}
             >
-              원래대로
+              {LABELS.BUTTON.RESTORE}
             </button>
             <button
               className={primaryButtonClass}
               onClick={handleInsert}
               disabled={!sqlText.trim() || isSending}
             >
-              {isSending ? "전송 중..." : "Supabase로 전송"}
+              {isSending ? LABELS.BUTTON.SENDING : LABELS.BUTTON.SEND_SUPABASE}
             </button>
           </div>
         </div>
@@ -236,7 +194,7 @@ const ProgramsPage = ({
               onTitleChange={setTitle}
               onSubtitleChange={setSubtitle}
               onImageFolderChange={setImageFolder}
-              onApply={handleApply}
+              onApply={() => rebuildSql(imageFolder)}
               onDownloadImage={() => downloadImage(sourceImgUrl, title)}
             />
             <SqlOutput
@@ -246,8 +204,7 @@ const ProgramsPage = ({
           </>
         ) : (
           <div className="rounded-[18px] border border-dashed border-panel-border p-8 text-center text-ink-muted">
-            프로그램 RSS URL을 입력하고 프로그램 불러오기를 실행하면 결과가
-            표시됩니다.
+            {LABELS.EMPTY.PROGRAM}
           </div>
         )}
       </section>

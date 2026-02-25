@@ -8,7 +8,11 @@ interface UseDownloadOptions {
   setProcess: (label: string, tone: ProcessTone) => void;
 }
 
-export function useDownload({ items, addLog, setProcess }: UseDownloadOptions) {
+export function useAudioDownload({
+  items,
+  addLog,
+  setProcess,
+}: UseDownloadOptions) {
   const [downloadProgress, setDownloadProgress] = useState<
     Record<string, number | null>
   >({});
