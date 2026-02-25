@@ -26,7 +26,7 @@ function buildR2DashboardUrl(imageFolder: string): string {
   if (imageFolder === "/eng_images/program") {
     return "https://dash.cloudflare.com/194031f1919f524b4ecbf1ad3c5f60f9/r2/default/buckets/pickle-demo?prefix=eng_images%2Fprogram%2F";
   }
-  return `https://dash.cloudflare.com/?to=storage/r2/bucket/rss/${encodeURIComponent(
+  return `https://dash.cloudflare.com/194031f1919f524b4ecbf1ad3c5f60f9/r2/default/buckets/pickle-demo?prefix=${encodeURIComponent(
     imageFolder.replace(/^\//, ""),
   )}`;
 }
