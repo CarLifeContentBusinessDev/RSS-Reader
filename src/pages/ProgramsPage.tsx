@@ -1,28 +1,28 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
-import SqlOutput from "../components/SqlOutput";
-import {
-  ghostButtonClass,
-  panelClass,
-  primaryButtonClass,
-} from "../constants/style";
-import type { ToastTone } from "../types";
-import { useAuthGuard } from "../hooks/useAuthGuard";
-import { useImageDownload } from "../hooks/useImageDownload";
-import { useProcessLog } from "../hooks/useProcessLog";
-import { useProgramFetch } from "../hooks/useProgramFetch";
-import { useProgramOptions } from "../hooks/useProgramOptions";
 import { GuidePanel } from "../components/GuidePanel";
 import { ProcessStatus } from "../components/ProcessStatus";
 import { ProgramFetchForm } from "../components/ProgramFetchForm";
 import { ProgramInfoEditor } from "../components/ProgramInfoEditor";
+import SqlOutput from "../components/SqlOutput";
+import { LABELS } from "../constants/labels";
+import { MESSAGES } from "../constants/message";
 import {
   buildImageFolder,
   DEFAUKLT_LANGUAGE,
   PROGRAM_GUIDE_STEPS,
 } from "../constants/options";
-import { MESSAGES } from "../constants/message";
-import { LABELS } from "../constants/labels";
+import {
+  ghostButtonClass,
+  panelClass,
+  primaryButtonClass,
+} from "../constants/style";
+import { useAuthGuard } from "../hooks/useAuthGuard";
+import { useImageDownload } from "../hooks/useImageDownload";
+import { useProcessLog } from "../hooks/useProcessLog";
+import { useProgramFetch } from "../hooks/useProgramFetch";
+import { useProgramOptions } from "../hooks/useProgramOptions";
+import type { ToastTone } from "../types";
 
 interface ProgramsPageProps {
   authUserEmail: string | null;
@@ -92,7 +92,7 @@ const ProgramsPage = ({
     showToast,
   });
 
-  const { downloadImage } = useImageDownload({ showToast });
+  const { downloadImage, isDownloading } = useImageDownload({ showToast });
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -191,12 +191,14 @@ const ProgramsPage = ({
               imgUrl={imgUrl}
               imageFolder={imageFolder}
               language={language}
+              isDownloading={isDownloading}
               onTitleChange={setTitle}
               onSubtitleChange={setSubtitle}
               onImageFolderChange={setImageFolder}
               onApply={() => rebuildSql(imageFolder)}
               onDownloadImage={() => downloadImage(sourceImgUrl, title)}
             />
+
             <SqlOutput
               value={sqlText}
               onChange={(e) => setSqlText(e.target.value)}
