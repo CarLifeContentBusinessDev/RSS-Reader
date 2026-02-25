@@ -14,6 +14,7 @@ interface ProgramInfoEditorProps {
   imgUrl: string;
   imageFolder: string;
   language: string;
+  isDownloading: boolean;
   onTitleChange: (v: string) => void;
   onSubtitleChange: (v: string) => void;
   onImageFolderChange: (v: string) => void;
@@ -38,6 +39,7 @@ export function ProgramInfoEditor({
   imgUrl,
   imageFolder,
   language,
+  isDownloading,
   onTitleChange,
   onSubtitleChange,
   onImageFolderChange,
@@ -108,9 +110,9 @@ export function ProgramInfoEditor({
             className={ghostButtonClass}
             type="button"
             onClick={onDownloadImage}
-            disabled={!sourceImgUrl}
+            disabled={!sourceImgUrl || isDownloading}
           >
-            이미지 다운로드
+            {isDownloading ? "압축 중..." : "이미지 다운로드"}
           </button>
           {sourceImgUrl && (
             <a
