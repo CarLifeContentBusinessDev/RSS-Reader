@@ -9,7 +9,11 @@ export const ITUNES_NS = "http://www.itunes.com/dtds/podcast-1.0.dtd";
 export const DEFAUKLT_LANGUAGE = "ko";
 
 export const buildImageFolder = (language: string) =>
-  language === "en" ? "/eng_images/program" : `/${language}_images/program`;
+  language === "ko"
+    ? "/images/program"
+    : language === "en"
+      ? "/eng_images/program"
+      : `/${language}_images/program`;
 
 export const buildEpisodeFolder = (language: string) =>
   language === "en"
