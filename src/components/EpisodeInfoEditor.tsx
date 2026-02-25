@@ -110,7 +110,7 @@ export function EpisodeInfoEditor({
               className={ghostButtonClass}
               href={`https://dash.cloudflare.com/194031f1919f524b4ecbf1ad3c5f60f9/r2/default/buckets/pickle-demo?prefix=${encodeURIComponent(
                 r2Folder.replace(/^\/+/, ""),
-              )}%2F`}
+              )}%2F${encodeURIComponent(channelOverride || channelTitle)}%2F`}
               target="_blank"
               rel="noopener noreferrer"
             >
