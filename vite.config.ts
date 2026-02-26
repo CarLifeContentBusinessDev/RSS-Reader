@@ -1,11 +1,62 @@
 import { Readable } from "node:stream";
-import { defineConfig, type Plugin } from "vite";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-const rssProxy = (): Plugin => ({
+interface IncomingMessageWithBody extends IncomingMessage {
+  body?: {
+    folder?: string;
+    filename?: string;
+    contentType?: string;
+    file?: string;
+  };
+}
+const rssProxy = (env: Record<string, string>): Plugin => ({
   name: "rss-proxy",
   configureServer(server) {
+    server.middlewares.use(
+      "/api/uploadImage",
+      async (req: IncomingMessageWithBody, res: ServerResponse) => {
+        console.log("[uploadImage] 요청 들어옴");
+
+        process.env.CLOUDFLARE_R2_ENDPOINT = env.CLOUDFLARE_R2_ENDPOINT;
+        process.env.CLOUDFLARE_R2_BUCKET = env.CLOUDFLARE_R2_BUCKET;
+        process.env.CLOUDFLARE_R2_ACCESS_KEY_ID =
+          env.CLOUDFLARE_R2_ACCESS_KEY_ID;
+        process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY =
+          env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
+        process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL =
+          env.CLOUDFLARE_R2_PUBLIC_BASE_URL;
+
+        const { default: handler } = await import("./api/uploadImage.ts");
+        let body = "";
+        req.on("data", (chunk) => {
+          body += chunk;
+        });
+        req.on("end", async () => {
+          try {
+            req.body = JSON.parse(body);
+          } catch {
+            req.body = {};
+          }
+          try {
+            await handler(req, res);
+          } catch (e) {
+            console.error("[uploadImage] handler error:", e);
+            res.statusCode = 500;
+            res.setHeader("Content-Type", "application/json");
+            res.end(
+              JSON.stringify({
+                error: "uploadImage handler error",
+                details: e instanceof Error ? e.message : String(e),
+              }),
+            );
+          }
+        });
+      },
+    );
+
     server.middlewares.use("/api/rss", async (req, res) => {
       try {
         const requestUrl = new URL(req.url ?? "", "http://localhost");
@@ -88,7 +139,10 @@ const rssProxy = (): Plugin => ({
   },
 });
 
-// https://vite.dev/config/
-export default defineConfig({
-  plugins: [tailwindcss(), react(), rssProxy()],
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+
+  return {
+    plugins: [tailwindcss(), react(), rssProxy(env)],
+  };
 });

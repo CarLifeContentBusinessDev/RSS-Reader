@@ -25,7 +25,6 @@ export function useImageDownload({ showToast }: UseImageDownloadOptions) {
   const compressToWebP = async (
     blob: Blob,
   ): Promise<{ blob: Blob; reachedLimit: boolean }> => {
-    // ...existing code...
     // 1. quality만 반복적으로 낮추며 압축
     const img = new Image();
     const objectUrl = URL.createObjectURL(blob);
@@ -137,5 +136,37 @@ export function useImageDownload({ showToast }: UseImageDownloadOptions) {
     }
   };
 
-  return { downloadImage, isDownloading };
+  // 이미지 업로드 함수
+  const uploadImageToR2 = async (
+    blob: Blob,
+    folder: string,
+    filename: string,
+    contentType = "image/webp",
+  ) => {
+    try {
+      // Blob → base64
+      const arrayBuffer = await blob.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+      const res = await fetch("/api/uploadImage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          folder,
+          filename,
+          contentType,
+          file: base64,
+        }),
+      });
+      if (!res.ok) throw new Error("R2 업로드 실패");
+      return await res.json();
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "R2 업로드 실패.",
+        "error",
+      );
+      return null;
+    }
+  };
+
+  return { downloadImage, isDownloading, uploadImageToR2, compressToWebP };
 }
