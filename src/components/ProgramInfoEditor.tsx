@@ -15,11 +15,14 @@ interface ProgramInfoEditorProps {
   imageFolder: string;
   language: string;
   isDownloading: boolean;
+  uploadDone: boolean;
+  hasCompressed: boolean;
   onTitleChange: (v: string) => void;
   onSubtitleChange: (v: string) => void;
   onImageFolderChange: (v: string) => void;
   onApply: () => void;
   onDownloadImage: () => void;
+  onRetryUpload: () => void;
 }
 
 /** Cloudflare R2 대시보드 URL 생성 */
@@ -40,11 +43,14 @@ export function ProgramInfoEditor({
   imageFolder,
   language,
   isDownloading,
+  uploadDone,
   onTitleChange,
   onSubtitleChange,
   onImageFolderChange,
   onApply,
   onDownloadImage,
+  onRetryUpload,
+  hasCompressed,
 }: ProgramInfoEditorProps) {
   const defaultFolder =
     language === "en" ? "/eng_images/program" : `/${language}_images/program`;
@@ -106,14 +112,56 @@ export function ProgramInfoEditor({
           >
             R2 폴더 바로가기
           </a>
-          <button
-            className={ghostButtonClass}
-            type="button"
-            onClick={onDownloadImage}
-            disabled={!sourceImgUrl || isDownloading}
-          >
-            {isDownloading ? "압축 중..." : "이미지 다운로드"}
-          </button>
+          {!uploadDone && !hasCompressed ? (
+            // 압축 전: "이미지 압축 및 업로드" 버튼
+            <button
+              className={ghostButtonClass}
+              type="button"
+              onClick={onDownloadImage}
+              disabled={!sourceImgUrl || isDownloading}
+            >
+              {isDownloading ? "압축 중..." : "이미지 압축 및 업로드"}
+            </button>
+          ) : uploadDone ? (
+            // 업로드 완료
+            <>
+              <button
+                className={
+                  primaryButtonClass + " bg-green-500 hover:bg-green-600"
+                }
+                type="button"
+                disabled
+              >
+                업로드 완료
+              </button>
+              <button
+                className={ghostButtonClass}
+                type="button"
+                onClick={onRetryUpload}
+              >
+                다시시도
+              </button>
+            </>
+          ) : (
+            // 압축됐지만 아직 업로드 안됨 (모달 닫은 상태)
+            <>
+              <button
+                className={ghostButtonClass}
+                type="button"
+                onClick={onRetryUpload}
+              >
+                업로드하기
+              </button>
+              <button
+                className={ghostButtonClass}
+                type="button"
+                onClick={onDownloadImage}
+                disabled={isDownloading}
+              >
+                재압축
+              </button>
+            </>
+          )}
           {sourceImgUrl && (
             <a
               className={textButtonClass}
@@ -127,7 +175,24 @@ export function ProgramInfoEditor({
           {imgUrl && (
             <a
               className={textButtonClass}
-              href={imgUrl}
+              href={(() => {
+                try {
+                  const url = new URL(imgUrl);
+                  const parts = url.pathname.split("/");
+                  if (parts.length > 0) {
+                    const last = parts[parts.length - 1];
+                    if (!last.endsWith(".webp")) {
+                      const base = last.replace(/\.[^.]+$/, "");
+                      parts[parts.length - 1] = base + ".webp";
+                      url.pathname = parts.join("/");
+                      return url.toString();
+                    }
+                  }
+                } catch (err) {
+                  console.error("R2 URL 변환 오류:", err);
+                }
+                return imgUrl;
+              })()}
               target="_blank"
               rel="noreferrer"
             >
@@ -144,6 +209,8 @@ export function ProgramInfoEditor({
           변경 반영
         </button>
       </div>
+
+      {/* 압축 이미지 정보 및 업로드 확인 UI는 모달로 이동 */}
     </div>
   );
 }
