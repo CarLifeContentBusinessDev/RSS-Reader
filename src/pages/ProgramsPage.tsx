@@ -49,7 +49,6 @@ const ProgramsPage = ({
   const { logs, processState, addLog, setProcess, clearLogs } = useProcessLog({
     showToast,
   });
-
   const { guard } = useAuthGuard({ authUserEmail, onRequireLogin, showToast });
 
   const {
@@ -92,48 +91,42 @@ const ProgramsPage = ({
     showToast,
   });
 
-  const { uploadImageToR2, compressToWebP } = useImageDownload({
-    showToast,
-  });
+  const { uploadImageToR2, compressToWebP } = useImageDownload({ showToast });
 
-  // 압축 이미지 상태 및 업로드 모달, 압축중 상태
   const [compressedBlob, setCompressedBlob] = useState<Blob | null>(null);
   const [compressedFilename, setCompressedFilename] = useState<string>("");
   const [compressedSize, setCompressedSize] = useState<number>(0);
-  const [showUploadModal, setShowUploadModal] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadDone, setUploadDone] = useState(false);
 
-  // 이미지 압축만 수행, 완료 시 모달 오픈
-  const handleCompressImage = async () => {
+  // 프로그램 불러오기 완료 시 자동 압축
+  useEffect(() => {
     if (!sourceImgUrl || !title) return;
-    setIsCompressing(true);
-    try {
-      const response = await fetch(sourceImgUrl);
-      if (!response.ok) throw new Error("이미지 다운로드 실패");
-      const blob = await response.blob();
-      const { blob: compressed } = await compressToWebP(blob);
-      setCompressedBlob(compressed);
-      // 파일명: 제목 그대로 (공백, 한글 등 포함)
-      const filename = `${title}.webp`;
-      setCompressedFilename(filename);
-      setCompressedSize(compressed.size);
-      showToast("이미지 압축 완료!", "success");
-      setShowUploadModal(true);
+    const compress = async () => {
+      setCompressedBlob(null);
       setUploadDone(false);
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        showToast(err.message, "error");
-      } else {
-        showToast("이미지 압축 실패", "error");
+      setIsCompressing(true);
+      try {
+        const response = await fetch(sourceImgUrl);
+        if (!response.ok) throw new Error("이미지 다운로드 실패");
+        const blob = await response.blob();
+        const { blob: compressed } = await compressToWebP(blob);
+        setCompressedBlob(compressed);
+        setCompressedFilename(`${title}.webp`);
+        setCompressedSize(compressed.size);
+      } catch (err) {
+        showToast(
+          err instanceof Error ? err.message : "이미지 압축 실패",
+          "error",
+        );
+      } finally {
+        setIsCompressing(false);
       }
-    } finally {
-      setIsCompressing(false);
-    }
-  };
+    };
+    compress();
+  }, [sourceImgUrl]);
 
-  // R2 업로드 핸들러 (모달에서 호출)
   const handleUploadImage = async () => {
     if (!compressedBlob || !compressedFilename) return;
     setIsUploading(true);
@@ -146,20 +139,15 @@ const ProgramsPage = ({
       );
       if (result) {
         setUploadDone(true);
-        setShowUploadModal(false);
         showToast("R2 업로드 완료!", "success");
       }
-      // 실패 시 uploadImageToR2 내부에서 에러 토스트 처리
     } finally {
       setIsUploading(false);
     }
   };
 
-  // 업로드 다시시도
   const handleRetryUpload = () => {
     setUploadDone(false);
-    setShowUploadModal(true);
-    // 업로드는 모달에서 직접 버튼 클릭 시만 진행
   };
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
@@ -181,76 +169,12 @@ const ProgramsPage = ({
     setImageFolder(buildImageFolder(DEFAUKLT_LANGUAGE));
     resetFields();
     clearLogs();
+    setCompressedBlob(null);
+    setUploadDone(false);
   };
 
   return (
     <>
-      {/* 이미지 업로드 모달 */}
-      {showUploadModal && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-lg p-8 min-w-[320px] max-w-[90vw]">
-            <h3 className="mb-4 text-lg font-bold">압축 이미지 정보</h3>
-            <div className="mb-2">파일명: {compressedFilename}</div>
-            <div className="mb-2">
-              사이즈: {(compressedSize / 1024).toFixed(1)} KB
-            </div>
-            {compressedBlob && (
-              <div className="mb-4 flex justify-center">
-                <img
-                  src={URL.createObjectURL(compressedBlob)}
-                  alt="압축 이미지 미리보기"
-                  style={{
-                    maxWidth: 120,
-                    maxHeight: 120,
-                    borderRadius: 8,
-                    boxShadow: "0 2px 8px #0002",
-                  }}
-                />
-              </div>
-            )}
-            <div className="flex gap-3 justify-end">
-              <button
-                className={ghostButtonClass}
-                type="button"
-                onClick={() => setShowUploadModal(false)}
-                disabled={isUploading}
-              >
-                취소
-              </button>
-              {!uploadDone ? (
-                <button
-                  className={primaryButtonClass}
-                  type="button"
-                  onClick={handleUploadImage}
-                  disabled={!compressedBlob || isUploading}
-                >
-                  {isUploading ? "업로드 중.." : "R2에 업로드"}
-                </button>
-              ) : (
-                <>
-                  <button
-                    className={
-                      primaryButtonClass + " bg-green-500 hover:bg-green-600"
-                    }
-                    type="button"
-                    disabled
-                  >
-                    업로드 완료
-                  </button>
-                  <button
-                    className={ghostButtonClass}
-                    type="button"
-                    onClick={handleRetryUpload}
-                  >
-                    다시시도
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-      {/* 헤더 */}
       <header className="flex gap-8 items-center">
         <div>
           <h1 className="mb-3 text-[clamp(2.6rem,4vw,4.2rem)]">
@@ -263,7 +187,6 @@ const ProgramsPage = ({
         <GuidePanel guide_steps={PROGRAM_GUIDE_STEPS} />
       </header>
 
-      {/* 입력 폼 패널 */}
       <section className={panelClass}>
         <ProgramFetchForm
           rssUrl={rssUrl}
@@ -283,11 +206,9 @@ const ProgramsPage = ({
           onSubmit={handleSubmit}
           onReset={handleReset}
         />
-
         <ProcessStatus logs={logs} processState={processState} error={error} />
       </section>
 
-      {/* 프로그램 정보 패널 */}
       <section className={`${panelClass} grid gap-6`}>
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
@@ -324,14 +245,17 @@ const ProgramsPage = ({
               imgUrl={imgUrl}
               imageFolder={imageFolder}
               language={language}
-              isDownloading={isCompressing || isUploading}
+              isCompressing={isCompressing}
+              isUploading={isUploading}
               uploadDone={uploadDone}
-              hasCompressed={!!compressedBlob}
+              compressedBlob={compressedBlob}
+              compressedFilename={compressedFilename}
+              compressedSize={compressedSize}
               onTitleChange={setTitle}
               onSubtitleChange={setSubtitle}
               onImageFolderChange={setImageFolder}
               onApply={() => rebuildSql(imageFolder)}
-              onDownloadImage={handleCompressImage}
+              onUpload={handleUploadImage}
               onRetryUpload={handleRetryUpload}
             />
             <SqlOutput
