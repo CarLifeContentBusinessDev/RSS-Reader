@@ -146,11 +146,24 @@ export function useEpisodeFetch({
     }));
 
     const effectiveChannel = channelOverride.trim() || channelTitle;
+
+    const itemsWithExt = mergedItems.map((item) => ({
+      ...item,
+      // blob URL인 경우 audioUrl을 filename 기반으로 임시 교체해서 ext 보존
+      audioUrl: item.audioUrl.startsWith("blob:")
+        ? `placeholder.${item.filename.split(".").pop() || "m4a"}`
+        : item.audioUrl,
+    }));
+
     const updatedItems = buildItemsWithChannel(
-      mergedItems,
+      itemsWithExt,
       effectiveChannel,
       r2Folder,
-    );
+    ).map((item, index) => ({
+      ...item,
+      audioUrl: mergedItems[index].audioUrl,
+    }));
+
     const programNumber = Number(programId) || 0;
 
     setChannelTitle(effectiveChannel);
