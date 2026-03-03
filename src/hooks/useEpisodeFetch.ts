@@ -249,12 +249,11 @@ export function useEpisodeFetch({
         return {
           ...item,
           audioUrl: newUrl,
-          // filename도 .m4a로 교체
+          r2Url: newUrl, // ← 추가
           filename: item.filename.replace(/\.mp3$/i, ".m4a"),
         };
       });
 
-      // SQL 재생성
       const programNumber = Number(programId) || 0;
       const newSql = buildSqlText(updated, programNumber, language);
       setSqlText(newSql);
