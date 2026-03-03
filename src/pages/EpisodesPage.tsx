@@ -86,8 +86,8 @@ const EpisodesPage = ({
     updateEditingDuration,
     confirmEditDuration,
     cancelEditDuration,
-    applyConvertedFiles, // 변환 완료 → blob URL + .m4a 파일명 교체
-    applyAudioUrls, // 업로드 완료 → R2 URL + SQL 재생성
+    applyAudioUrls,
+    applyConvertedItem,
   } = useEpisodeFetch({
     language,
     r2Folder,
@@ -109,7 +109,11 @@ const EpisodesPage = ({
     isAllConverted,
     getConvertSummary,
     resetConvertStates,
-  } = useAudioConvert({ addLog, setProcess });
+  } = useAudioConvert({
+    addLog,
+    setProcess,
+    onItemConverted: applyConvertedItem,
+  });
 
   const { uploadStates, uploadAll, isAllUploaded, getUploadSummary } =
     useAudioUpload({ addLog, setProcess });
@@ -133,17 +137,9 @@ const EpisodesPage = ({
       clearLogs();
       resetConvertStates();
 
-      // 1) RSS 파싱
       const parsedItems = await fetchEpisodes(rssUrl, programId, limit);
       if (!parsedItems?.length) return;
-
-      // 2) m4a 변환
-      const fileMap = await convertAll(parsedItems);
-
-      // 3) 변환 완료 즉시 — 카드 파일명 .m4a 교체 + 다운로드 blob URL 교체
-      if (Object.keys(fileMap).length > 0) {
-        applyConvertedFiles(fileMap);
-      }
+      await convertAll(parsedItems);
     });
   };
 
@@ -154,10 +150,7 @@ const EpisodesPage = ({
   // 수동 재변환
   const handleConvertAll = () => {
     guard(MESSAGES.LOGIN_REQUIRED_FETCH, async () => {
-      const fileMap = await convertAll(items);
-      if (Object.keys(fileMap).length > 0) {
-        applyConvertedFiles(fileMap);
-      }
+      await convertAll(items);
     });
   };
 
