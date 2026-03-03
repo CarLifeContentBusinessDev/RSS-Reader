@@ -1,10 +1,14 @@
 import { inputClass, textButtonClass } from "../constants/style";
+import type { ConvertState } from "../hooks/useAudioConvert";
+import type { UploadState } from "../hooks/useAudioUpload";
 import type { ParsedItem } from "../types";
 
 interface EpisodeCardProps {
   item: ParsedItem;
   originalDuration?: string;
   downloadProgress: number | null | undefined;
+  convertState?: ConvertState;
+  uploadState?: UploadState;
   onDownload: (url: string, filename: string) => void;
   onStartEditDuration: (filename: string) => void;
   onUpdateEditingDuration: (filename: string, value: string) => void;
@@ -16,6 +20,8 @@ export function EpisodeCard({
   item,
   originalDuration,
   downloadProgress,
+  convertState,
+  uploadState,
   onDownload,
   onStartEditDuration,
   onUpdateEditingDuration,
@@ -28,7 +34,6 @@ export function EpisodeCard({
   return (
     <article className="grid gap-4 rounded-[18px] border border-panel-border bg-surface p-5 animate-fadeInUp">
       <h3 className="text-[1.05rem] font-semibold">{item.title}</h3>
-
       <dl className="grid gap-2.5">
         {/* 날짜 */}
         <div>
@@ -89,6 +94,8 @@ export function EpisodeCard({
           </dd>
         </div>
 
+        {/* 변환 상태 바 */}
+
         {/* 파일명 */}
         <div>
           <dt className="text-[0.7rem] uppercase tracking-[0.12em] text-ink-muted">
@@ -97,7 +104,6 @@ export function EpisodeCard({
           <dd className="mt-1 font-semibold">{item.filename}</dd>
         </div>
       </dl>
-
       {/* 링크 / 다운로드 */}
       <div className="flex flex-wrap items-center gap-4 text-[0.9rem]">
         <a
@@ -127,7 +133,8 @@ export function EpisodeCard({
             : "다운로드"}
         </button>
       </div>
-
+      <ConvertProgressBar state={convertState} />
+      <UploadStatusBadge state={uploadState} />
       {/* 진행률 바 */}
       {downloadProgress != null && (
         <div className="flex items-center gap-2">
@@ -144,4 +151,60 @@ export function EpisodeCard({
       )}
     </article>
   );
+}
+
+// 변환 상태 바
+function ConvertProgressBar({ state }: { state?: ConvertState }) {
+  if (!state || state.status === "idle") return null;
+
+  const label =
+    state.status === "converting"
+      ? `변환 중... ${state.progress}%`
+      : state.status === "done"
+        ? "✓ 변환 완료"
+        : `✗ 변환 실패${state.error ? `: ${state.error}` : ""}`;
+
+  const barColor =
+    state.status === "done"
+      ? "bg-green-500"
+      : state.status === "error"
+        ? "bg-red-400"
+        : "bg-yellow-400";
+
+  return (
+    <div className="mt-2">
+      <div className="flex justify-between text-[0.75rem] text-ink-muted mb-1">
+        <span>{label}</span>
+      </div>
+      {state.status === "converting" && (
+        <div className="h-1.5 w-full rounded-full bg-panel-border overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-300 ${barColor}`}
+            style={{ width: `${state.progress}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 업로드 상태
+function UploadStatusBadge({ state }: { state?: UploadState }) {
+  if (!state || state.status === "idle") return null;
+
+  const label =
+    state.status === "uploading"
+      ? "R2 업로드 중..."
+      : state.status === "done"
+        ? "✓ R2 업로드 완료"
+        : `✗ 업로드 실패${state.error ? `: ${state.error}` : ""}`;
+
+  const color =
+    state.status === "done"
+      ? "text-green-600"
+      : state.status === "error"
+        ? "text-red-500"
+        : "text-blue-500";
+
+  return <p className={`mt-1 text-[0.75rem] font-medium ${color}`}>{label}</p>;
 }
