@@ -7,7 +7,8 @@ export type ConvertStatus = "idle" | "converting" | "done" | "error";
 export interface ConvertState {
   status: ConvertStatus;
   progress: number;
-  file?: string; // base64 m4a
+  file?: string;
+  fileSize?: number;
   error?: string;
 }
 
@@ -97,6 +98,7 @@ export function useAudioConvert({
             status: "done",
             progress: 100,
             file: data.file,
+            fileSize: data.fileSize,
           });
           fileMap[item.filename] = data.file;
           onItemConverted?.(item.filename, data.file);

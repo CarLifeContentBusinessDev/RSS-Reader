@@ -62,7 +62,9 @@ export default async function handler(
 
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ file: base64, filename }));
+    res.end(
+      JSON.stringify({ file: base64, filename, fileSize: m4aBuffer.length }),
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[convertAudio] error:", message);
