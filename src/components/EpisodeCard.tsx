@@ -157,11 +157,16 @@ export function EpisodeCard({
 function ConvertProgressBar({ state }: { state?: ConvertState }) {
   if (!state || state.status === "idle") return null;
 
+  const formatSize = (bytes: number) => {
+    if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+    return `${(bytes / 1024).toFixed(0)}KB`;
+  };
+
   const label =
     state.status === "converting"
       ? `변환 중... ${state.progress}%`
       : state.status === "done"
-        ? "✓ 변환 완료"
+        ? `✓ 변환 완료${state.fileSize ? ` · ${formatSize(state.fileSize)}` : ""}`
         : `✗ 변환 실패${state.error ? `: ${state.error}` : ""}`;
 
   const barColor =
