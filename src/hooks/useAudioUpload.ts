@@ -52,8 +52,10 @@ export function useAudioUpload({ addLog, setProcess }: UseAudioUploadOptions) {
     let hasError = false;
 
     for (const item of items) {
-      const m4aFilename = item.filename.replace(/\.mp3$/i, ".m4a");
-      const convertState = convertStates[item.filename];
+      const m4aFilename = item.filename.replace(/\.(mp3|m4a)$/i, ".m4a");
+      const mp3Key = item.filename.replace(/\.m4a$/i, ".mp3");
+      const convertState =
+        convertStates[mp3Key] ?? convertStates[item.filename];
 
       if (!convertState?.file) {
         updateState(item.filename, {
