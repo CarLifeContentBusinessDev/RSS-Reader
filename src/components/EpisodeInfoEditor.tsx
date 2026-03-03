@@ -7,6 +7,8 @@ import {
   primaryButtonClass,
 } from "../constants/style";
 import type { ParsedItem } from "../types";
+import type { ConvertState } from "../hooks/useAudioConvert";
+import type { UploadState } from "../hooks/useAudioUpload";
 
 interface EpisodeInfoEditorProps {
   channelTitle: string;
@@ -16,6 +18,10 @@ interface EpisodeInfoEditorProps {
   originalItems: ParsedItem[];
   downloadProgress: Record<string, number | null | undefined>;
   downloadSummary: { total: number; completed: number };
+  convertStates: Record<string, ConvertState>;
+  convertSummary: { total: number; completed: number; failed: number };
+  uploadStates: Record<string, UploadState>;
+  uploadSummary: { total: number; completed: number; failed: number };
   onDownload: (url: string, filename: string) => void;
   onStartEditDuration: (filename: string) => void;
   onUpdateEditingDuration: (filename: string, value: string) => void;
@@ -35,6 +41,10 @@ export function EpisodeInfoEditor({
   originalItems,
   downloadProgress,
   downloadSummary,
+  convertStates,
+  convertSummary,
+  uploadStates,
+  uploadSummary,
   onDownload,
   onStartEditDuration,
   onUpdateEditingDuration,
@@ -63,12 +73,42 @@ export function EpisodeInfoEditor({
         </div>
       </div>
 
-      {/* 다운로드 진행 요약 */}
-      {downloadSummary.total > 0 && (
-        <div className="rounded-full bg-[rgba(16,35,35,0.08)] px-3 py-1 text-[0.85rem] font-semibold text-ink w-fit">
-          다운로드 {downloadSummary.completed}/{downloadSummary.total}
-        </div>
-      )}
+      {/* 진행 현황 배지 */}
+      <div className="flex flex-wrap gap-2">
+        {downloadSummary.total > 0 && (
+          <div className="rounded-full bg-[rgba(16,35,35,0.08)] px-3 py-1 text-[0.85rem] font-semibold text-ink w-fit">
+            다운로드 {downloadSummary.completed}/{downloadSummary.total}
+          </div>
+        )}
+        {convertSummary.total > 0 && (
+          <div
+            className={`rounded-full px-3 py-1 text-[0.85rem] font-semibold w-fit ${
+              convertSummary.failed > 0
+                ? "bg-red-100 text-red-700"
+                : convertSummary.completed === convertSummary.total
+                  ? "bg-green-100 text-green-700"
+                  : "bg-yellow-100 text-yellow-700"
+            }`}
+          >
+            변환 {convertSummary.completed}/{convertSummary.total}
+            {convertSummary.failed > 0 && ` (실패 ${convertSummary.failed})`}
+          </div>
+        )}
+        {uploadSummary.total > 0 && (
+          <div
+            className={`rounded-full px-3 py-1 text-[0.85rem] font-semibold w-fit ${
+              uploadSummary.failed > 0
+                ? "bg-red-100 text-red-700"
+                : uploadSummary.completed === uploadSummary.total
+                  ? "bg-green-100 text-green-700"
+                  : "bg-blue-100 text-blue-700"
+            }`}
+          >
+            R2업로드 {uploadSummary.completed}/{uploadSummary.total}
+            {uploadSummary.failed > 0 && ` (실패 ${uploadSummary.failed})`}
+          </div>
+        )}
+      </div>
 
       {/* 에피소드 카드 목록 */}
       <div className="grid gap-5 grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
@@ -82,6 +122,14 @@ export function EpisodeInfoEditor({
               item={item}
               originalDuration={originalItem?.duration}
               downloadProgress={downloadProgress[item.filename]}
+              convertState={
+                convertStates[item.filename] ??
+                convertStates[item.filename.replace(/\.m4a$/i, ".mp3")]
+              }
+              uploadState={
+                uploadStates[item.filename] ??
+                uploadStates[item.filename.replace(/\.m4a$/i, ".mp3")]
+              }
               onDownload={onDownload}
               onStartEditDuration={onStartEditDuration}
               onUpdateEditingDuration={onUpdateEditingDuration}

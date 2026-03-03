@@ -31,6 +31,20 @@ export function useAudioDownload({
       addLog(`다운로드 시작: ${filename}`, "action");
       updateProgress(filename, 0);
 
+      // blob URL이면 서버 프록시 없이 직접 다운로드
+      if (url.startsWith("blob:")) {
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        updateProgress(filename, 100);
+        addLog(`다운로드 완료: ${filename}`, "success");
+        setProcess("다운로드 완료", "success");
+        return true;
+      }
+
       const response = await fetch(
         `/api/download?url=${encodeURIComponent(url)}`,
       );
@@ -40,7 +54,6 @@ export function useAudioDownload({
 
       const totalBytes = Number(response.headers.get("content-length") || 0);
 
-      // content-length 없거나 body 스트림 미지원이면 단순 blob 방식
       if (!response.body || !totalBytes) {
         const blob = await response.blob();
         triggerBlobDownload(blob, filename);
@@ -50,7 +63,6 @@ export function useAudioDownload({
         return true;
       }
 
-      // 스트리밍으로 진행률 추적
       const reader = response.body.getReader();
       const chunks: Uint8Array[] = [];
       let receivedBytes = 0;
