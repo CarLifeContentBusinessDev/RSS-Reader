@@ -16,6 +16,8 @@ import {
   primaryButtonClass,
 } from "../constants/style";
 import { useAudioDownload } from "../hooks/useAudioDownload";
+import { useAudioConvert } from "../hooks/useAudioConvert";
+import { useAudioUpload } from "../hooks/useAudioUpload";
 import { useAuthGuard } from "../hooks/useAuthGuard";
 import { useEpisodeFetch } from "../hooks/useEpisodeFetch";
 import { useProcessLog } from "../hooks/useProcessLog";
@@ -52,9 +54,7 @@ const EpisodesPage = ({
   const { logs, processState, addLog, setProcess, clearLogs } = useProcessLog({
     showToast,
   });
-
   const { guard } = useAuthGuard({ authUserEmail, onRequireLogin, showToast });
-
   const {
     programId,
     setProgramId,
@@ -86,6 +86,8 @@ const EpisodesPage = ({
     updateEditingDuration,
     confirmEditDuration,
     cancelEditDuration,
+    applyConvertedFiles, // 변환 완료 → blob URL + .m4a 파일명 교체
+    applyAudioUrls, // 업로드 완료 → R2 URL + SQL 재생성
   } = useEpisodeFetch({
     language,
     r2Folder,
@@ -95,14 +97,53 @@ const EpisodesPage = ({
     setStatus,
   });
 
-  const { downloadProgress, downloadSummary, downloadFile, handleDownloadAll } =
-    useAudioDownload({ items, addLog, setProcess });
+  const { downloadProgress, downloadSummary, downloadFile } = useAudioDownload({
+    items,
+    addLog,
+    setProcess,
+  });
 
+  const {
+    convertStates,
+    convertAll,
+    isAllConverted,
+    getConvertSummary,
+    resetConvertStates,
+  } = useAudioConvert({ addLog, setProcess });
+
+  const { uploadStates, uploadAll, isAllUploaded, getUploadSummary } =
+    useAudioUpload({ addLog, setProcess });
+
+  const convertSummary = getConvertSummary(items);
+  const uploadSummary = getUploadSummary(items);
+  const allConverted = isAllConverted(items);
+  const allUploaded = isAllUploaded(items);
+
+  const isConverting = Object.values(convertStates).some(
+    (s) => s.status === "converting",
+  );
+  const isUploading = Object.values(uploadStates).some(
+    (s) => s.status === "uploading",
+  );
+
+  // RSS 파싱 → 자동 변환 → 파일명+audioUrl 즉시 교체
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    guard(MESSAGES.LOGIN_REQUIRED_FETCH, () => {
+    guard(MESSAGES.LOGIN_REQUIRED_FETCH, async () => {
       clearLogs();
-      fetchEpisodes(rssUrl, programId, limit);
+      resetConvertStates();
+
+      // 1) RSS 파싱
+      const parsedItems = await fetchEpisodes(rssUrl, programId, limit);
+      if (!parsedItems?.length) return;
+
+      // 2) m4a 변환
+      const fileMap = await convertAll(parsedItems);
+
+      // 3) 변환 완료 즉시 — 카드 파일명 .m4a 교체 + 다운로드 blob URL 교체
+      if (Object.keys(fileMap).length > 0) {
+        applyConvertedFiles(fileMap);
+      }
     });
   };
 
@@ -110,11 +151,30 @@ const EpisodesPage = ({
     guard(MESSAGES.LOGIN_REQUIRED_SEND, () => insertToSupabase());
   };
 
-  const handleCopy = async () => {
-    if (!sqlText) return;
-    await navigator.clipboard.writeText(sqlText);
-    setStatus(MESSAGES.SQL_COPIED);
-    window.setTimeout(() => setStatus(""), 2000);
+  // 수동 재변환
+  const handleConvertAll = () => {
+    guard(MESSAGES.LOGIN_REQUIRED_FETCH, async () => {
+      const fileMap = await convertAll(items);
+      if (Object.keys(fileMap).length > 0) {
+        applyConvertedFiles(fileMap);
+      }
+    });
+  };
+
+  // R2 업로드 → R2 URL로 교체 + SQL 재생성
+  const handleUploadAll = async () => {
+    guard(MESSAGES.LOGIN_REQUIRED_SEND, async () => {
+      const effectiveChannel = channelOverride || channelTitle;
+      const urlMap = await uploadAll(
+        items,
+        convertStates,
+        r2Folder,
+        effectiveChannel,
+      );
+      if (Object.keys(urlMap).length > 0) {
+        applyAudioUrls(urlMap, programId);
+      }
+    });
   };
 
   const handleReset = () => {
@@ -127,7 +187,6 @@ const EpisodesPage = ({
 
   return (
     <>
-      {/* 헤더 */}
       <header className="flex gap-8 items-center">
         <div>
           <h1 className="mb-3 text-[clamp(2.6rem,4vw,4.2rem)]">
@@ -140,7 +199,6 @@ const EpisodesPage = ({
         <GuidePanel guide_steps={EPISODE_GUIDE_STEPS} />
       </header>
 
-      {/* 입력 폼 패널 */}
       <section className={panelClass}>
         <EpisodesFetchForm
           rssUrl={rssUrl}
@@ -151,7 +209,7 @@ const EpisodesPage = ({
           programSearched={programSearched}
           programInputMode={programInputMode}
           isProgramSearching={isProgramSearching}
-          isLoading={isLoading}
+          isLoading={isLoading || isConverting}
           onRssUrlChange={setRssUrl}
           onLanguageChange={setLanguage}
           onProgramIdChange={setProgramId}
@@ -164,9 +222,7 @@ const EpisodesPage = ({
         <ProcessStatus logs={logs} processState={processState} error={error} />
       </section>
 
-      {/* 에피소드 정보 패널 */}
       <section className={`${panelClass} grid gap-6`}>
-        {/* 패널 헤더 + 액션 버튼 */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h2>{LABELS.SECTION.EPISODE_INFO.TITLE}</h2>
@@ -177,17 +233,25 @@ const EpisodesPage = ({
           <div className="flex flex-wrap items-center gap-3">
             <button
               className={ghostButtonClass}
-              onClick={handleCopy}
-              disabled={!sqlText}
+              onClick={handleConvertAll}
+              disabled={!items.length || isConverting || isLoading}
             >
-              {LABELS.BUTTON.COPY_SQL}
+              {isConverting
+                ? `변환 중... (${convertSummary.completed}/${convertSummary.total})`
+                : allConverted
+                  ? "재변환"
+                  : "m4a 변환"}
             </button>
             <button
               className={ghostButtonClass}
-              onClick={handleDownloadAll}
-              disabled={!items.length}
+              onClick={handleUploadAll}
+              disabled={!allConverted || isUploading}
             >
-              {LABELS.BUTTON.DOWNLOAD_ALL_MP3}
+              {isUploading
+                ? `업로드 중... (${uploadSummary.completed}/${uploadSummary.total})`
+                : allUploaded
+                  ? "재업로드"
+                  : "R2 업로드"}
             </button>
             <button
               className={primaryButtonClass}
@@ -209,6 +273,10 @@ const EpisodesPage = ({
               originalItems={originalItems}
               downloadProgress={downloadProgress}
               downloadSummary={downloadSummary}
+              convertStates={convertStates}
+              convertSummary={convertSummary}
+              uploadStates={uploadStates}
+              uploadSummary={uploadSummary}
               onDownload={downloadFile}
               onStartEditDuration={startEditDuration}
               onUpdateEditingDuration={updateEditingDuration}
