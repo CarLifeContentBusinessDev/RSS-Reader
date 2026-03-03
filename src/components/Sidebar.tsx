@@ -6,12 +6,6 @@ const MENU_LINK = [
 ];
 
 const NAV_LINK = [
-  { name: "webp 변환", href: "https://bigconvert.11zon.com/ko/png-to-webp" },
-  {
-    name: "webp 압축",
-    href: "https://imagecompressor.11zon.com/ko/compress-webp",
-  },
-  { name: "mp3 압축", href: "https://freecompress.com/ko/compress-mp3" },
   {
     name: "Supabase",
     href: "https://supabase.com/dashboard/project/newreozzmyijevbnjwul",
