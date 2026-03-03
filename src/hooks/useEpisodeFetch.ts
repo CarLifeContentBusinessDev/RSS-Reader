@@ -281,6 +281,24 @@ export function useEpisodeFetch({
     );
   };
 
+  const applyConvertedItem = (mp3Filename: string, base64: string) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.filename !== mp3Filename) return item;
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: "audio/mp4" });
+        const blobUrl = URL.createObjectURL(blob);
+        return {
+          ...item,
+          audioUrl: blobUrl,
+          filename: item.filename.replace(/\.mp3$/i, ".m4a"),
+        };
+      }),
+    );
+  };
+
   return {
     items,
     sqlText,
@@ -303,5 +321,6 @@ export function useEpisodeFetch({
     cancelEditDuration,
     applyAudioUrls,
     applyConvertedFiles,
+    applyConvertedItem,
   };
 }
