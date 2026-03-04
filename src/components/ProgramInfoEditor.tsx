@@ -61,7 +61,7 @@ export function ProgramInfoEditor({
     language === "en" ? "/eng_images/program" : `/${language}_images/program`;
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-4 min-w-0">
       {/* 제목 / 부제 */}
       <div className="grid gap-4 md:grid-cols-2">
         <label className={fieldClass}>
@@ -85,18 +85,18 @@ export function ProgramInfoEditor({
       </div>
 
       {/* 원본 이미지 URL + 원본 보기 버튼 */}
-      <div className="col-span-full grid gap-2">
+      <div className="col-span-full grid gap-2 min-w-0">
         <span className="text-[0.9rem] font-semibold text-ink-muted">
           원본 이미지 URL
         </span>
-        <div className="w-full">
-          <div className="inline-flex items-center min-w-0">
+        <div className="w-full min-w-0">
+          <div className="flex items-center min-w-0">
             <span className="min-w-0 rounded-xl border border-panel-border bg-surface p-3.5 text-[0.95rem] text-ink truncate">
               {sourceImgUrl || "-"}
             </span>
             {sourceImgUrl && (
               <a
-                className={textButtonClass + " ml-2"}
+                className={textButtonClass + " ml-2 shrink-0"}
                 href={sourceImgUrl}
                 target="_blank"
                 rel="noreferrer"
