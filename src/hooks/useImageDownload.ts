@@ -37,6 +37,7 @@ export function useImageDownload({ showToast }: UseImageDownloadOptions) {
 
     let width = img.naturalWidth;
     let height = img.naturalHeight;
+    console.log(`🔧 이미지 해상도: ${width}x${height}`);
 
     const compressWithQuality = async (
       canvas: HTMLCanvasElement,
@@ -48,6 +49,7 @@ export function useImageDownload({ showToast }: UseImageDownloadOptions) {
       ctx.drawImage(img, 0, 0, width, height);
       let bestBlob: Blob | null = null;
       let bestSize = Infinity;
+      console.log(`🔄 Quality 압축 시작 (${width}x${height})...`);
       for (
         let quality = 0.9;
         quality >= 0.01;
@@ -65,9 +67,15 @@ export function useImageDownload({ showToast }: UseImageDownloadOptions) {
           bestSize = compressed.size;
         }
         if (compressed.size <= SIZE_THRESHOLD) {
+          console.log(
+            `  ✓ quality=${quality.toFixed(2)} → ${(compressed.size / 1024).toFixed(1)}KB (목표 도달!)`,
+          );
           return { blob: compressed, reachedLimit: false };
         }
       }
+      console.log(
+        `  ⚠️ 최소 크기: ${(bestSize / 1024).toFixed(1)}KB (목표 미달)`,
+      );
       return { blob: bestBlob!, reachedLimit: true };
     };
 
@@ -84,6 +92,7 @@ export function useImageDownload({ showToast }: UseImageDownloadOptions) {
     for (let i = 0; i < 5; i++) {
       width = Math.max(1, Math.round(width / 2));
       height = Math.max(1, Math.round(height / 2));
+      console.log(`📐 해상도 축소 ${i + 1}단계: ${width}x${height}`);
       canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
@@ -93,6 +102,9 @@ export function useImageDownload({ showToast }: UseImageDownloadOptions) {
       }
     }
     // 최종 결과 반환
+    console.log(
+      `⚠️ 최종 크기: ${(qualityResult.blob.size / 1024).toFixed(1)}KB`,
+    );
     return qualityResult;
   };
 
@@ -102,7 +114,10 @@ export function useImageDownload({ showToast }: UseImageDownloadOptions) {
     setIsDownloading(true);
 
     try {
-      const response = await fetch(url);
+      // 서버 프록시를 통해 이미지 가져오기 (CORS 우회)
+      const encodedUrl = encodeURIComponent(url);
+      const response = await fetch(`/api/download?url=${encodedUrl}`);
+
       if (!response.ok)
         throw new Error(`다운로드 실패: 상태 코드 ${response.status}.`);
 

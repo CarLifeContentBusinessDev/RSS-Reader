@@ -107,25 +107,41 @@ const ProgramsPage = ({
       setCompressedBlob(null);
       setUploadDone(false);
       setIsCompressing(true);
+      console.log("🖼️ 이미지 압축 시작:", sourceImgUrl);
       try {
-        const response = await fetch(sourceImgUrl);
-        if (!response.ok) throw new Error("이미지 다운로드 실패");
+        // 서버 프록시를 통해 이미지 가져오기 (CORS 우회)
+        const encodedUrl = encodeURIComponent(sourceImgUrl);
+        console.log("📡 프록시를 통해 이미지 다운로드 중...");
+        const response = await fetch(`/api/download?url=${encodedUrl}`);
+        if (!response.ok) {
+          throw new Error(
+            `이미지 다운로드 실패: ${response.status} ${response.statusText}`,
+          );
+        }
+        console.log("✅ 이미지 다운로드 완료, 압축 시작...");
         const blob = await response.blob();
+        console.log(`📦 원본 크기: ${(blob.size / 1024).toFixed(1)} KB`);
         const { blob: compressed } = await compressToWebP(blob);
+        console.log(
+          `✨ 압축 완료: ${(compressed.size / 1024).toFixed(1)} KB (${((1 - compressed.size / blob.size) * 100).toFixed(1)}% 감소)`,
+        );
         setCompressedBlob(compressed);
         setCompressedFilename(`${title}.webp`);
         setCompressedSize(compressed.size);
       } catch (err) {
+        console.error("❌ 이미지 압축 에러:", err);
         showToast(
           err instanceof Error ? err.message : "이미지 압축 실패",
           "error",
         );
       } finally {
         setIsCompressing(false);
+        console.log("🏁 압축 프로세스 종료");
       }
     };
     compress();
-  }, [sourceImgUrl]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceImgUrl, title]);
 
   const handleUploadImage = async () => {
     if (!compressedBlob || !compressedFilename) return;

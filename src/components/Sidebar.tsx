@@ -49,6 +49,7 @@ const Sidebar = () => {
           </span>
           {NAV_LINK.map(({ name, href }) => (
             <a
+              key={href}
               className="text-sm font-semibold text-accent-strong transition hover:text-accent "
               href={href}
               target="_blank"
