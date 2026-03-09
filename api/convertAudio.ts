@@ -1,11 +1,12 @@
-import { exec } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
+import ffmpeg from "fluent-ffmpeg";
 
-const execAsync = promisify(exec);
+// Vercel 환경에서 ffmpeg 바이너리 경로 설정
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 export default async function handler(
   req: IncomingMessage,
@@ -52,10 +53,17 @@ export default async function handler(
     const arrayBuffer = await upstream.arrayBuffer();
     fs.writeFileSync(mp3Path, Buffer.from(arrayBuffer));
 
-    // ffmpeg 변환: AAC 128k
-    await execAsync(
-      `ffmpeg -y -i "${mp3Path}" -vn -c:a aac -b:a 128k "${m4aPath}"`,
-    );
+    // ffmpeg 변환: AAC 128k (fluent-ffmpeg 사용)
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(mp3Path)
+        .audioCodec("aac")
+        .audioBitrate("128k")
+        .noVideo()
+        .output(m4aPath)
+        .on("end", () => resolve())
+        .on("error", (err) => reject(err))
+        .run();
+    });
 
     const m4aBuffer = fs.readFileSync(m4aPath);
     const base64 = m4aBuffer.toString("base64");
