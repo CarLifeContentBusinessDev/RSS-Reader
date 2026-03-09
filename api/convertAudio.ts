@@ -8,6 +8,16 @@ import ffmpeg from "fluent-ffmpeg";
 // Vercel 환경에서 ffmpeg 바이너리 경로 설정
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
+class HttpError extends Error {
+  statusCode: number;
+
+  constructor(statusCode: number, message: string) {
+    super(message);
+    this.statusCode = statusCode;
+    this.name = "HttpError";
+  }
+}
+
 export default async function handler(
   req: IncomingMessage,
   res: ServerResponse,
@@ -45,27 +55,53 @@ export default async function handler(
   const m4aPath = path.join(tmpDir, "output.m4a");
 
   try {
+    console.log(`[convertAudio] 다운로드 시작: ${url}`);
+    const downloadStart = Date.now();
+
     // mp3 다운로드
     const upstream = await fetch(url);
     if (!upstream.ok) {
-      throw new Error(`mp3 fetch 실패: ${upstream.status}`);
+      throw new HttpError(
+        502,
+        `원본 오디오 다운로드 실패 (${upstream.status})`,
+      );
     }
     const arrayBuffer = await upstream.arrayBuffer();
+    const downloadTime = Date.now() - downloadStart;
+    console.log(
+      `[convertAudio] 다운로드 완료: ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)}MB (${downloadTime}ms)`,
+    );
+
+    const sizeMB = arrayBuffer.byteLength / 1024 / 1024;
+    console.log(`[convertAudio] 입력 파일 크기: ${sizeMB.toFixed(1)}MB`);
+
     fs.writeFileSync(mp3Path, Buffer.from(arrayBuffer));
 
-    // ffmpeg 변환: AAC 128k (fluent-ffmpeg 사용)
+    // ffmpeg 변환: AAC 저용량 프로필 (대용량 파일 대응)
+    console.log(`[convertAudio] 변환 시작...`);
+    const convertStart = Date.now();
+
     await new Promise<void>((resolve, reject) => {
       ffmpeg(mp3Path)
         .audioCodec("aac")
-        .audioBitrate("128k")
+        .audioBitrate("32k")
+        .audioChannels(1)
+        .audioFrequency(22050)
         .noVideo()
+        .outputOptions(["-movflags faststart"]) // mp4 컨테이너 시작 위치 최적화
         .output(m4aPath)
         .on("end", () => resolve())
-        .on("error", (err) => reject(err))
+        .on("error", (err) => reject(new HttpError(500, err.message)))
         .run();
     });
 
+    const convertTime = Date.now() - convertStart;
+    console.log(`[convertAudio] 변환 완료 (${convertTime}ms)`);
+
     const m4aBuffer = fs.readFileSync(m4aPath);
+    console.log(
+      `[convertAudio] 최종 크기: ${(m4aBuffer.length / 1024).toFixed(1)}KB`,
+    );
     const base64 = m4aBuffer.toString("base64");
 
     res.statusCode = 200;
@@ -75,9 +111,21 @@ export default async function handler(
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const statusCode =
+      err instanceof HttpError
+        ? err.statusCode
+        : message.toLowerCase().includes("timeout")
+          ? 504
+          : 500;
     console.error("[convertAudio] error:", message);
-    res.statusCode = 500;
-    res.end(JSON.stringify({ error: "변환 실패", details: message }));
+    res.statusCode = statusCode;
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        error: statusCode === 504 ? "변환 시간 초과" : "변환 실패",
+        details: message,
+      }),
+    );
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
