@@ -223,6 +223,8 @@ export function useProgramFetch({
     setOriginal(null);
     setError("");
     setInsertResult("");
+    setIsLoading(false);
+    setIsSending(false);
   };
 
   return {

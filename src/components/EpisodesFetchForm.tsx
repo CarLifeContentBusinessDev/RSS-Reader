@@ -35,6 +35,8 @@ interface EpisodesFetchFormProps {
   onAutoConvertAudioChange: (v: boolean) => void;
   onAutoUploadToR2Change: (v: boolean) => void;
   onAutoSendToSupabaseChange: (v: boolean) => void;
+  automationToggleLabel: string;
+  onSelectAllAutomation: () => void;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
   onReset: () => void;
 }
@@ -63,6 +65,8 @@ export function EpisodesFetchForm({
   onAutoConvertAudioChange,
   onAutoUploadToR2Change,
   onAutoSendToSupabaseChange,
+  automationToggleLabel,
+  onSelectAllAutomation,
   onSubmit,
   onReset,
 }: EpisodesFetchFormProps) {
@@ -184,9 +188,19 @@ export function EpisodesFetchForm({
 
       {/* 자동화 옵션 */}
       <div className={fieldClass}>
-        <span className={fieldLabelClass}>자동 진행 설정</span>
+        <div className="mb-1 flex items-center gap-2">
+          <span className={fieldLabelClass}>자동 진행 설정</span>
+          <button
+            type="button"
+            className={textButtonClass}
+            style={{ padding: 0, fontSize: "0.95em" }}
+            onClick={onSelectAllAutomation}
+          >
+            {automationToggleLabel}
+          </button>
+        </div>
         <div className="flex flex-col gap-3">
-          <label className="flex items-center gap-3 cursor-pointer group">
+          <label className="inline-flex w-fit items-center gap-3 cursor-pointer group">
             <input
               type="checkbox"
               checked={autoConvertAudio}
@@ -197,7 +211,7 @@ export function EpisodesFetchForm({
               확장자 변환
             </span>
           </label>
-          <label className="flex items-center gap-3 cursor-pointer group">
+          <label className="inline-flex w-fit items-center gap-3 cursor-pointer group">
             <input
               type="checkbox"
               checked={autoUploadToR2}
@@ -208,7 +222,7 @@ export function EpisodesFetchForm({
               R2 업로드
             </span>
           </label>
-          <label className="flex items-center gap-3 cursor-pointer group">
+          <label className="inline-flex w-fit items-center gap-3 cursor-pointer group">
             <input
               type="checkbox"
               checked={autoSendToSupabase}

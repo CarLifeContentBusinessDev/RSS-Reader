@@ -10,6 +10,7 @@ import {
   inputClass,
   primaryButtonClass,
   fieldLabelClass,
+  textButtonClass,
 } from "../constants/style";
 
 interface ProgramFetchFormProps {
@@ -34,6 +35,8 @@ interface ProgramFetchFormProps {
   onBroadcastingChange: (v: number | "") => void;
   onAutoUploadChange: (v: boolean) => void;
   onAutoSendChange: (v: boolean) => void;
+  automationToggleLabel: string;
+  onSelectAllAutomation: () => void;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
   onReset: () => void;
 }
@@ -60,6 +63,8 @@ export function ProgramFetchForm({
   onBroadcastingChange,
   onAutoUploadChange,
   onAutoSendChange,
+  automationToggleLabel,
+  onSelectAllAutomation,
   onSubmit,
   onReset,
 }: ProgramFetchFormProps) {
@@ -141,9 +146,20 @@ export function ProgramFetchForm({
 
       {/* 자동화 설정 */}
       <div className={fieldClass}>
-        <span className={fieldLabelClass}>자동 진행 설정</span>
+        <div className="mb-1 flex items-center gap-2">
+          <span className={fieldLabelClass}>자동 진행 설정</span>
+          <button
+            type="button"
+            className={textButtonClass}
+            style={{ padding: 0, fontSize: "0.95em" }}
+            onClick={onSelectAllAutomation}
+            disabled={hasProgram}
+          >
+            {automationToggleLabel}
+          </button>
+        </div>
         <div className="flex flex-col gap-3">
-          <label className="flex items-center gap-3 cursor-pointer group">
+          <label className="inline-flex w-fit items-center gap-3 cursor-pointer group">
             <input
               type="checkbox"
               checked={autoUploadToR2}
@@ -157,7 +173,7 @@ export function ProgramFetchForm({
               R2 업로드
             </span>
           </label>
-          <label className="flex items-center gap-3 cursor-pointer group">
+          <label className="inline-flex w-fit items-center gap-3 cursor-pointer group">
             <input
               type="checkbox"
               checked={autoSendToSupabase}

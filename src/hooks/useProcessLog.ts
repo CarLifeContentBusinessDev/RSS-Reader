@@ -44,7 +44,16 @@ export function useProcessLog({ showToast }: UseProcessLogOptions) {
     setProcessState({ label, tone });
   };
 
-  const clearLogs = () => setLogs([]);
+  const resetProcess = () =>
+    setProcessState({
+      label: "대기 중",
+      tone: "idle",
+    });
 
-  return { logs, processState, addLog, setProcess, clearLogs };
+  const clearLogs = () => {
+    setLogs([]);
+    resetProcess();
+  };
+
+  return { logs, processState, addLog, setProcess, clearLogs, resetProcess };
 }

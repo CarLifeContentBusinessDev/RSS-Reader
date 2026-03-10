@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { EpisodeInfoEditor } from "../components/EpisodeInfoEditor";
 import { EpisodesFetchForm } from "../components/EpisodesFetchForm";
 import { EpisodeSqlEditor } from "../components/EpisodeSqlEditor";
@@ -22,6 +22,29 @@ import type { ToastTone } from "../types";
 import { MESSAGES } from "../constants/message";
 import { LABELS } from "../constants/labels";
 
+const EPISODES_FORM_STORAGE_KEY = "rss-reader:episodes-form";
+
+type EpisodesFormSnapshot = {
+  rssUrl?: string;
+  language?: string;
+  programId?: string;
+  limit?: string;
+  r2Folder?: string;
+  autoConvertAudio?: boolean;
+  autoUploadToR2?: boolean;
+  autoSendToSupabase?: boolean;
+};
+
+const loadEpisodesSnapshot = (): EpisodesFormSnapshot => {
+  try {
+    const raw = localStorage.getItem(EPISODES_FORM_STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as EpisodesFormSnapshot;
+  } catch {
+    return {};
+  }
+};
+
 interface EpisodesPageProps {
   authUserEmail: string | null;
   onRequireLogin: () => void;
@@ -36,20 +59,33 @@ const EpisodesPage = ({
   showToast,
   setStatus,
 }: EpisodesPageProps) => {
-  const [rssUrl, setRssUrl] = useState("");
-  const [language, setLanguage] = useState(DEFAUKLT_LANGUAGE);
-  const [limit, setLimit] = useState("4");
-  const [r2Folder, setR2Folder] = useState(
-    buildEpisodeFolder(DEFAUKLT_LANGUAGE),
-  );
-  const [autoConvertAudio, setAutoConvertAudio] = useState(false);
-  const [autoUploadToR2, setAutoUploadToR2] = useState(false);
-  const [autoSendToSupabase, setAutoSendToSupabase] = useState(false);
-  const [uploadResult, setUploadResult] = useState("");
+  const savedSnapshot = loadEpisodesSnapshot();
 
-  useEffect(() => {
-    setR2Folder(buildEpisodeFolder(language));
-  }, [language]);
+  const [rssUrl, setRssUrl] = useState(savedSnapshot.rssUrl ?? "");
+  const [language, setLanguage] = useState(
+    savedSnapshot.language ?? DEFAUKLT_LANGUAGE,
+  );
+  const [limit, setLimit] = useState(savedSnapshot.limit ?? "4");
+  const [r2Folder, setR2Folder] = useState(
+    savedSnapshot.r2Folder ??
+      buildEpisodeFolder(savedSnapshot.language ?? DEFAUKLT_LANGUAGE),
+  );
+  const [autoConvertAudio, setAutoConvertAudio] = useState(
+    Boolean(savedSnapshot.autoConvertAudio),
+  );
+  const [autoUploadToR2, setAutoUploadToR2] = useState(
+    Boolean(savedSnapshot.autoUploadToR2),
+  );
+  const [autoSendToSupabase, setAutoSendToSupabase] = useState(
+    Boolean(savedSnapshot.autoSendToSupabase),
+  );
+  const [uploadResult, setUploadResult] = useState("");
+  const restoredProgramId = useRef(false);
+
+  const handleLanguageChange = (nextLanguage: string) => {
+    setLanguage(nextLanguage);
+    setR2Folder(buildEpisodeFolder(nextLanguage));
+  };
 
   const { logs, processState, addLog, setProcess, clearLogs } = useProcessLog({
     showToast,
@@ -65,6 +101,14 @@ const EpisodesPage = ({
     searchProgram,
     toggleInputMode,
   } = useProgramSearch({ rssUrl, language, showToast });
+
+  useEffect(() => {
+    if (restoredProgramId.current) return;
+    restoredProgramId.current = true;
+    if (savedSnapshot.programId) {
+      setProgramId(savedSnapshot.programId);
+    }
+  }, [savedSnapshot.programId, setProgramId]);
 
   const {
     items,
@@ -90,6 +134,8 @@ const EpisodesPage = ({
     cancelEditDuration,
     applyAudioUrls,
     applyConvertedItem,
+    syncSqlPreview,
+    resetState,
   } = useEpisodeFetch({
     language,
     r2Folder,
@@ -99,7 +145,12 @@ const EpisodesPage = ({
     setStatus,
   });
 
-  const { downloadProgress, downloadSummary, downloadFile } = useAudioDownload({
+  const {
+    downloadProgress,
+    downloadSummary,
+    downloadFile,
+    resetDownloadStates,
+  } = useAudioDownload({
     items,
     addLog,
     setProcess,
@@ -117,8 +168,41 @@ const EpisodesPage = ({
     onItemConverted: applyConvertedItem,
   });
 
-  const { uploadStates, uploadAll, isAllUploaded, getUploadSummary } =
-    useAudioUpload({ addLog, setProcess });
+  const {
+    uploadStates,
+    uploadAll,
+    isAllUploaded,
+    getUploadSummary,
+    resetUploadStates,
+  } = useAudioUpload({ addLog, setProcess });
+
+  useEffect(() => {
+    const snapshot: EpisodesFormSnapshot = {
+      rssUrl,
+      language,
+      programId,
+      limit,
+      r2Folder,
+      autoConvertAudio,
+      autoUploadToR2,
+      autoSendToSupabase,
+    };
+    localStorage.setItem(EPISODES_FORM_STORAGE_KEY, JSON.stringify(snapshot));
+  }, [
+    rssUrl,
+    language,
+    programId,
+    limit,
+    r2Folder,
+    autoConvertAudio,
+    autoUploadToR2,
+    autoSendToSupabase,
+  ]);
+
+  useEffect(() => {
+    if (!items.length) return;
+    syncSqlPreview(programId);
+  }, [items, channelOverride, r2Folder, programId, syncSqlPreview]);
 
   const convertSummary = getConvertSummary(items);
   const uploadSummary = getUploadSummary(items);
@@ -131,6 +215,8 @@ const EpisodesPage = ({
   const isUploading = Object.values(uploadStates).some(
     (s) => s.status === "uploading",
   );
+  const isAllAutomationSelected =
+    autoConvertAudio && autoUploadToR2 && autoSendToSupabase;
 
   // RSS 파싱 → 선택적 자동 변환/업로드/전송
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
@@ -237,6 +323,7 @@ const EpisodesPage = ({
   ]);
 
   const handleReset = () => {
+    localStorage.removeItem(EPISODES_FORM_STORAGE_KEY);
     setRssUrl("");
     setProgramId("");
     setLanguage(DEFAUKLT_LANGUAGE);
@@ -247,6 +334,23 @@ const EpisodesPage = ({
     setAutoSendToSupabase(false);
     setUploadResult("");
     setInsertResult("");
+    resetConvertStates();
+    resetUploadStates();
+    resetDownloadStates();
+    resetState();
+    clearLogs();
+  };
+
+  const handleSelectAllAutomation = () => {
+    if (isAllAutomationSelected) {
+      setAutoConvertAudio(false);
+      setAutoUploadToR2(false);
+      setAutoSendToSupabase(false);
+      return;
+    }
+    setAutoConvertAudio(true);
+    setAutoUploadToR2(true);
+    setAutoSendToSupabase(true);
   };
 
   return (
@@ -279,7 +383,7 @@ const EpisodesPage = ({
           autoUploadToR2={autoUploadToR2}
           autoSendToSupabase={autoSendToSupabase}
           onRssUrlChange={setRssUrl}
-          onLanguageChange={setLanguage}
+          onLanguageChange={handleLanguageChange}
           onProgramIdChange={setProgramId}
           onLimitChange={setLimit}
           onR2FolderChange={setR2Folder}
@@ -288,6 +392,10 @@ const EpisodesPage = ({
           onAutoConvertAudioChange={setAutoConvertAudio}
           onAutoUploadToR2Change={setAutoUploadToR2}
           onAutoSendToSupabaseChange={setAutoSendToSupabase}
+          automationToggleLabel={
+            isAllAutomationSelected ? "전체 해제" : "전체 선택"
+          }
+          onSelectAllAutomation={handleSelectAllAutomation}
           onSubmit={handleSubmit}
           onReset={handleReset}
         />
@@ -350,7 +458,6 @@ const EpisodesPage = ({
               onConfirmEditDuration={confirmEditDuration}
               onCancelEditDuration={cancelEditDuration}
               r2Folder={r2Folder}
-              onR2FolderChange={setR2Folder}
               onResetToOriginal={resetToOriginal}
               onSendToSupabase={handleInsert}
             />

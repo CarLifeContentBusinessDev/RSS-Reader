@@ -141,10 +141,13 @@ export function useAudioUpload({ addLog, setProcess }: UseAudioUploadOptions) {
       );
     });
 
+  const resetUploadStates = () => setUploadStates({});
+
   return {
     uploadStates,
     uploadAll,
     isAllUploaded,
     getUploadSummary,
+    resetUploadStates,
   };
 }

@@ -126,11 +126,17 @@ export function useAudioDownload({
     );
   };
 
+  const resetDownloadStates = () => {
+    setDownloadProgress({});
+    setDownloadSummary({ total: 0, completed: 0 });
+  };
+
   return {
     downloadProgress,
     downloadSummary,
     downloadFile,
     handleDownloadAll,
+    resetDownloadStates,
   };
 }
 

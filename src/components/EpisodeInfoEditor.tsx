@@ -1,7 +1,5 @@
 import { EpisodeCard } from "./EpisodeCard";
 import {
-  fieldClass,
-  fieldLabelClass,
   ghostButtonClass,
   inputClass,
   primaryButtonClass,
@@ -30,7 +28,6 @@ interface EpisodeInfoEditorProps {
   onConfirmEditDuration: (filename: string) => void;
   onCancelEditDuration: (filename: string) => void;
   r2Folder: string;
-  onR2FolderChange: (v: string) => void;
   onResetToOriginal: () => void;
   onSendToSupabase: () => void;
 }
@@ -55,7 +52,6 @@ export function EpisodeInfoEditor({
   onConfirmEditDuration,
   onCancelEditDuration,
   r2Folder,
-  onR2FolderChange,
   onResetToOriginal,
   onSendToSupabase,
 }: EpisodeInfoEditorProps) {
@@ -144,19 +140,8 @@ export function EpisodeInfoEditor({
         })}
       </div>
 
-      {/* R2 폴더 설정 */}
+      {/* 액션 */}
       <div className="grid gap-4">
-        <label className={`${fieldClass} max-w-125`}>
-          <span className={fieldLabelClass}>R2 폴더</span>
-          <input
-            type="text"
-            value={r2Folder}
-            onChange={(e) => onR2FolderChange(e.target.value)}
-            placeholder="/de-episodes-audio/program"
-            className={inputClass}
-          />
-        </label>
-        
         <div className="col-span-full flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-4">
             <a

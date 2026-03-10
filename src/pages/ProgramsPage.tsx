@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GuidePanel } from "../components/GuidePanel";
 import { ProcessStatus } from "../components/ProcessStatus";
 import { ProgramFetchForm } from "../components/ProgramFetchForm";
@@ -21,6 +21,29 @@ import { useProgramFetch } from "../hooks/useProgramFetch";
 import { useProgramOptions } from "../hooks/useProgramOptions";
 import type { ToastTone } from "../types";
 
+const PROGRAMS_FORM_STORAGE_KEY = "rss-reader:programs-form";
+
+type ProgramsFormSnapshot = {
+  rssUrl?: string;
+  type?: string;
+  language?: string;
+  imageFolder?: string;
+  categoryId?: number | "";
+  broadcastingId?: number | "";
+  autoUploadToR2?: boolean;
+  autoSendToSupabase?: boolean;
+};
+
+const loadProgramsSnapshot = (): ProgramsFormSnapshot => {
+  try {
+    const raw = localStorage.getItem(PROGRAMS_FORM_STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as ProgramsFormSnapshot;
+  } catch {
+    return {};
+  }
+};
+
 interface ProgramsPageProps {
   authUserEmail: string | null;
   onRequireLogin: () => void;
@@ -32,16 +55,39 @@ const ProgramsPage = ({
   onRequireLogin,
   showToast,
 }: ProgramsPageProps) => {
-  const [rssUrl, setRssUrl] = useState("");
-  const [language, setLanguage] = useState(DEFAUKLT_LANGUAGE);
-  const [type, setType] = useState("podcast");
-  const [imageFolder, setImageFolder] = useState(
-    buildImageFolder(DEFAUKLT_LANGUAGE),
+  const savedSnapshot = loadProgramsSnapshot();
+
+  const [rssUrl, setRssUrl] = useState(savedSnapshot.rssUrl ?? "");
+  const [language, setLanguage] = useState(
+    savedSnapshot.language ?? DEFAUKLT_LANGUAGE,
   );
-  const [autoUploadToR2, setAutoUploadToR2] = useState(false);
-  const [autoSendToSupabase, setAutoSendToSupabase] = useState(false);
+  const [type, setType] = useState(savedSnapshot.type ?? "podcast");
+  const [imageFolder, setImageFolder] = useState(
+    savedSnapshot.imageFolder ??
+      buildImageFolder(savedSnapshot.language ?? DEFAUKLT_LANGUAGE),
+  );
+  const [autoUploadToR2, setAutoUploadToR2] = useState(
+    Boolean(savedSnapshot.autoUploadToR2),
+  );
+  const [autoSendToSupabase, setAutoSendToSupabase] = useState(
+    Boolean(savedSnapshot.autoSendToSupabase),
+  );
+  const isFirstLanguageSync = useRef(true);
+  const restoredSelects = useRef(false);
+  const savedCategoryId =
+    typeof savedSnapshot.categoryId === "number"
+      ? savedSnapshot.categoryId
+      : "";
+  const savedBroadcastingId =
+    typeof savedSnapshot.broadcastingId === "number"
+      ? savedSnapshot.broadcastingId
+      : "";
 
   useEffect(() => {
+    if (isFirstLanguageSync.current) {
+      isFirstLanguageSync.current = false;
+      return;
+    }
     setImageFolder(buildImageFolder(language));
   }, [language]);
 
@@ -101,6 +147,68 @@ const ProgramsPage = ({
   const [isCompressing, setIsCompressing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadDone, setUploadDone] = useState(false);
+  const isAllAutomationSelected = autoUploadToR2 && autoSendToSupabase;
+
+  useEffect(() => {
+    if (restoredSelects.current) return;
+
+    if (
+      savedCategoryId !== "" &&
+      categoryId === "" &&
+      categoryOptions.some((opt) => Number(opt.value) === savedCategoryId)
+    ) {
+      setCategoryId(savedCategoryId);
+    }
+
+    if (
+      savedBroadcastingId !== "" &&
+      broadcastingId === "" &&
+      broadcastingOptions.some(
+        (opt) => Number(opt.value) === savedBroadcastingId,
+      )
+    ) {
+      setBroadcastingId(savedBroadcastingId);
+    }
+
+    if (
+      (savedCategoryId === "" || categoryId !== "") &&
+      (savedBroadcastingId === "" || broadcastingId !== "")
+    ) {
+      restoredSelects.current = true;
+    }
+  }, [
+    savedCategoryId,
+    savedBroadcastingId,
+    categoryId,
+    broadcastingId,
+    categoryOptions,
+    broadcastingOptions,
+    setCategoryId,
+    setBroadcastingId,
+  ]);
+
+  useEffect(() => {
+    const snapshot: ProgramsFormSnapshot = {
+      rssUrl,
+      type,
+      language,
+      imageFolder,
+      categoryId,
+      broadcastingId,
+      autoUploadToR2,
+      autoSendToSupabase,
+    };
+    localStorage.setItem(PROGRAMS_FORM_STORAGE_KEY, JSON.stringify(snapshot));
+  }, [
+    rssUrl,
+    type,
+    language,
+    imageFolder,
+    categoryId,
+    broadcastingId,
+    autoUploadToR2,
+    autoSendToSupabase,
+  ]);
 
   // title, subtitle 변경 시 자동으로 SQL 재생성
   useEffect(() => {
@@ -204,6 +312,16 @@ const ProgramsPage = ({
     setInsertResult("");
   };
 
+  const handleSelectAllAutomation = () => {
+    if (isAllAutomationSelected) {
+      setAutoUploadToR2(false);
+      setAutoSendToSupabase(false);
+      return;
+    }
+    setAutoUploadToR2(true);
+    setAutoSendToSupabase(true);
+  };
+
   const handleImgUrlChange = (newImgUrl: string) => {
     setImgUrl(newImgUrl);
     // imgUrl 변경 시 SQL 재생성 (title과 subtitle은 현재 값 유지)
@@ -237,6 +355,7 @@ const ProgramsPage = ({
   };
 
   const handleReset = () => {
+    localStorage.removeItem(PROGRAMS_FORM_STORAGE_KEY);
     setRssUrl("");
     setType("podcast");
     setLanguage(DEFAUKLT_LANGUAGE);
@@ -244,9 +363,16 @@ const ProgramsPage = ({
     setAutoUploadToR2(false);
     setAutoSendToSupabase(false);
     resetFields();
+    resetSelects();
     clearLogs();
     setCompressedBlob(null);
+    setCompressedFilename("");
+    setCompressedSize(0);
+    setIsCompressing(false);
+    setIsUploading(false);
     setUploadDone(false);
+    setInsertResult("");
+    restoredSelects.current = true;
   };
 
   return (
@@ -286,6 +412,10 @@ const ProgramsPage = ({
           onBroadcastingChange={setBroadcastingId}
           onAutoUploadChange={setAutoUploadToR2}
           onAutoSendChange={setAutoSendToSupabase}
+          automationToggleLabel={
+            isAllAutomationSelected ? "전체 해제" : "전체 선택"
+          }
+          onSelectAllAutomation={handleSelectAllAutomation}
           onSubmit={handleSubmit}
           onReset={handleReset}
         />

@@ -34,6 +34,53 @@ export function useEpisodeFetch({
   const [isSending, setIsSending] = useState(false);
   const [insertResult, setInsertResult] = useState("");
 
+  const parseProgramId = (programId: string) => {
+    const trimmedProgramId = programId.trim();
+    const parsedProgramId = trimmedProgramId ? Number(trimmedProgramId) : null;
+    return parsedProgramId !== null && Number.isFinite(parsedProgramId)
+      ? parsedProgramId
+      : null;
+  };
+
+  const buildSqlPreviewFromItems = (
+    sourceItems: ParsedItem[],
+    programId: string,
+    overrideChannel?: string,
+  ) => {
+    const normalizedItems = sourceItems.map((item) => ({
+      ...item,
+      duration: item._editingDurationValue ?? item.duration,
+    }));
+
+    const effectiveChannel =
+      (overrideChannel ?? channelOverride).trim() || channelTitle;
+
+    const itemsWithExt = normalizedItems.map((item) => ({
+      ...item,
+      audioUrl: item.audioUrl.startsWith("blob:")
+        ? `placeholder.${item.filename.split(".").pop() || "m4a"}`
+        : item.audioUrl,
+    }));
+
+    const rebuilt = buildItemsWithChannel(
+      itemsWithExt,
+      effectiveChannel,
+      r2Folder,
+    ).map((item, index) => ({
+      ...item,
+      audioUrl: normalizedItems[index].audioUrl,
+      duration: normalizedItems[index].duration,
+    }));
+
+    const programNumber = parseProgramId(programId);
+    return buildSqlText(rebuilt, programNumber, language);
+  };
+
+  const syncSqlPreview = (programId: string, overrideChannel?: string) => {
+    if (!items.length) return;
+    setSqlText(buildSqlPreviewFromItems(items, programId, overrideChannel));
+  };
+
   const formatInsertError = (insertError: unknown) => {
     if (!insertError || typeof insertError !== "object") {
       return "원인을 확인할 수 없는 전송 실패입니다.";
@@ -99,14 +146,7 @@ export function useEpisodeFetch({
       addLog("RSS 수신 완료. 파싱 중...", "info");
 
       const limitNumber = Math.max(1, Number(limit) || 1);
-      const trimmedProgramId = programId.trim();
-      const parsedProgramId = trimmedProgramId
-        ? Number(trimmedProgramId)
-        : null;
-      const programNumber =
-        parsedProgramId !== null && Number.isFinite(parsedProgramId)
-          ? parsedProgramId
-          : null;
+      const programNumber = parseProgramId(programId);
       const parsed = parseRss(
         xmlText,
         limitNumber,
@@ -270,12 +310,7 @@ export function useEpisodeFetch({
       audioUrl: mergedItems[index].audioUrl,
     }));
 
-    const trimmedProgramId = programId.trim();
-    const parsedProgramId = trimmedProgramId ? Number(trimmedProgramId) : null;
-    const programNumber =
-      parsedProgramId !== null && Number.isFinite(parsedProgramId)
-        ? parsedProgramId
-        : null;
+    const programNumber = parseProgramId(programId);
 
     setChannelTitle(effectiveChannel);
     setItems(updatedItems);
@@ -365,14 +400,7 @@ export function useEpisodeFetch({
         };
       });
 
-      const trimmedProgramId = programId.trim();
-      const parsedProgramId = trimmedProgramId
-        ? Number(trimmedProgramId)
-        : null;
-      const programNumber =
-        parsedProgramId !== null && Number.isFinite(parsedProgramId)
-          ? parsedProgramId
-          : null;
+      const programNumber = parseProgramId(programId);
       const newSql = buildSqlText(updated, programNumber, language);
       setSqlText(newSql);
 
@@ -429,6 +457,21 @@ export function useEpisodeFetch({
     );
   };
 
+  const resetState = () => {
+    setItems([]);
+    setSqlText("");
+    setOriginalSqlText("");
+    setOriginalItems([]);
+    setChannelTitle("");
+    setChannelOverride("");
+    setOriginalChannelTitle("");
+    setError("");
+    setIsLoading(false);
+    setIsSending(false);
+    setInsertResult("");
+    setStatus("");
+  };
+
   return {
     items,
     sqlText,
@@ -454,5 +497,7 @@ export function useEpisodeFetch({
     applyAudioUrls,
     applyConvertedFiles,
     applyConvertedItem,
+    syncSqlPreview,
+    resetState,
   };
 }
