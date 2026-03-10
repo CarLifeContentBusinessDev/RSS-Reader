@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { EpisodeInfoEditor } from "../components/EpisodeInfoEditor";
 import { EpisodesFetchForm } from "../components/EpisodesFetchForm";
 import { EpisodeSqlEditor } from "../components/EpisodeSqlEditor";
@@ -10,11 +10,7 @@ import {
   DEFAUKLT_LANGUAGE,
   EPISODE_GUIDE_STEPS,
 } from "../constants/options";
-import {
-  ghostButtonClass,
-  panelClass,
-  primaryButtonClass,
-} from "../constants/style";
+import { ghostButtonClass, panelClass } from "../constants/style";
 import { useAudioDownload } from "../hooks/useAudioDownload";
 import { useAudioConvert } from "../hooks/useAudioConvert";
 import { useAudioUpload } from "../hooks/useAudioUpload";
@@ -46,6 +42,10 @@ const EpisodesPage = ({
   const [r2Folder, setR2Folder] = useState(
     buildEpisodeFolder(DEFAUKLT_LANGUAGE),
   );
+  const [autoConvertAudio, setAutoConvertAudio] = useState(false);
+  const [autoUploadToR2, setAutoUploadToR2] = useState(false);
+  const [autoSendToSupabase, setAutoSendToSupabase] = useState(false);
+  const [uploadResult, setUploadResult] = useState("");
 
   useEffect(() => {
     setR2Folder(buildEpisodeFolder(language));
@@ -76,8 +76,10 @@ const EpisodesPage = ({
     error,
     isLoading,
     isSending,
+    insertResult,
     setSqlText,
     setChannelOverride,
+    setInsertResult,
     fetchEpisodes,
     insertToSupabase,
     applyChanges,
@@ -130,22 +132,32 @@ const EpisodesPage = ({
     (s) => s.status === "uploading",
   );
 
-  // RSS 파싱 → 자동 변환 → 파일명+audioUrl 즉시 교체
+  // RSS 파싱 → 선택적 자동 변환/업로드/전송
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     guard(MESSAGES.LOGIN_REQUIRED_FETCH, async () => {
       clearLogs();
       resetConvertStates();
+      setUploadResult("");
+      setInsertResult("");
 
       const parsedItems = await fetchEpisodes(rssUrl, programId, limit);
       if (!parsedItems?.length) return;
-      await convertAll(parsedItems);
+      if (autoConvertAudio) {
+        await convertAll(parsedItems);
+      }
     });
   };
 
-  const handleInsert = () => {
-    guard(MESSAGES.LOGIN_REQUIRED_SEND, () => insertToSupabase());
-  };
+  const handleInsert = useCallback(() => {
+    guard(MESSAGES.LOGIN_REQUIRED_SEND, () => {
+      // 채널명, R2폴더 변경사항 반영 후 전송
+      if (items.length > 0) {
+        applyChanges(programId);
+      }
+      insertToSupabase();
+    });
+  }, [guard, insertToSupabase, items, programId, applyChanges]);
 
   // 수동 재변환
   const handleConvertAll = () => {
@@ -155,10 +167,11 @@ const EpisodesPage = ({
   };
 
   // R2 업로드 → R2 URL로 교체 + SQL 재생성
-  const handleUploadAll = async () => {
+  const handleUploadAll = useCallback(async () => {
     guard(MESSAGES.LOGIN_REQUIRED_SEND, async () => {
+      setUploadResult("working");
       const effectiveChannel = channelOverride || channelTitle;
-      const urlMap = await uploadAll(
+      const { urlMap, hasError } = await uploadAll(
         items,
         convertStates,
         r2Folder,
@@ -167,15 +180,73 @@ const EpisodesPage = ({
       if (Object.keys(urlMap).length > 0) {
         applyAudioUrls(urlMap, programId);
       }
+      setUploadResult(hasError ? "failed" : "success");
     });
-  };
+  }, [
+    guard,
+    channelOverride,
+    channelTitle,
+    items,
+    convertStates,
+    r2Folder,
+    uploadAll,
+    applyAudioUrls,
+    programId,
+  ]);
+
+  // 자동 R2 업로드 (변환 완료 후)
+  useEffect(() => {
+    if (
+      autoUploadToR2 &&
+      allConverted &&
+      !isUploading &&
+      items.length > 0 &&
+      !isLoading &&
+      !uploadResult
+    ) {
+      handleUploadAll();
+    }
+  }, [
+    autoUploadToR2,
+    allConverted,
+    isUploading,
+    items.length,
+    isLoading,
+    uploadResult,
+    handleUploadAll,
+  ]);
+
+  // 자동 Supabase 전송 (업로드 완료 후)
+  useEffect(() => {
+    if (
+      autoSendToSupabase &&
+      allUploaded &&
+      !isSending &&
+      items.length > 0 &&
+      !insertResult
+    ) {
+      handleInsert();
+    }
+  }, [
+    autoSendToSupabase,
+    allUploaded,
+    isSending,
+    items.length,
+    insertResult,
+    handleInsert,
+  ]);
 
   const handleReset = () => {
     setRssUrl("");
-    setProgramId("0");
+    setProgramId("");
     setLanguage(DEFAUKLT_LANGUAGE);
     setLimit("4");
     setR2Folder(buildEpisodeFolder(DEFAUKLT_LANGUAGE));
+    setAutoConvertAudio(false);
+    setAutoUploadToR2(false);
+    setAutoSendToSupabase(false);
+    setUploadResult("");
+    setInsertResult("");
   };
 
   return (
@@ -198,17 +269,25 @@ const EpisodesPage = ({
           language={language}
           programId={programId}
           limit={limit}
+          r2Folder={r2Folder}
           programOptions={programOptions}
           programSearched={programSearched}
           programInputMode={programInputMode}
           isProgramSearching={isProgramSearching}
           isLoading={isLoading || isConverting}
+          autoConvertAudio={autoConvertAudio}
+          autoUploadToR2={autoUploadToR2}
+          autoSendToSupabase={autoSendToSupabase}
           onRssUrlChange={setRssUrl}
           onLanguageChange={setLanguage}
           onProgramIdChange={setProgramId}
           onLimitChange={setLimit}
+          onR2FolderChange={setR2Folder}
           onProgramSearch={searchProgram}
           onToggleInputMode={toggleInputMode}
+          onAutoConvertAudioChange={setAutoConvertAudio}
+          onAutoUploadToR2Change={setAutoUploadToR2}
+          onAutoSendToSupabaseChange={setAutoSendToSupabase}
           onSubmit={handleSubmit}
           onReset={handleReset}
         />
@@ -246,13 +325,6 @@ const EpisodesPage = ({
                   ? "재업로드"
                   : "R2 업로드"}
             </button>
-            <button
-              className={primaryButtonClass}
-              onClick={handleInsert}
-              disabled={!sqlText.trim() || isSending}
-            >
-              {isSending ? LABELS.BUTTON.SENDING : LABELS.BUTTON.SEND_SUPABASE}
-            </button>
           </div>
         </div>
 
@@ -270,6 +342,8 @@ const EpisodesPage = ({
               convertSummary={convertSummary}
               uploadStates={uploadStates}
               uploadSummary={uploadSummary}
+              sqlText={sqlText}
+              isSending={isSending}
               onDownload={downloadFile}
               onStartEditDuration={startEditDuration}
               onUpdateEditingDuration={updateEditingDuration}
@@ -278,7 +352,7 @@ const EpisodesPage = ({
               r2Folder={r2Folder}
               onR2FolderChange={setR2Folder}
               onResetToOriginal={resetToOriginal}
-              onApplyChanges={() => applyChanges(programId)}
+              onSendToSupabase={handleInsert}
             />
             <EpisodeSqlEditor
               sqlText={sqlText}

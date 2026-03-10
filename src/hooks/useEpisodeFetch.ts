@@ -32,6 +32,47 @@ export function useEpisodeFetch({
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [insertResult, setInsertResult] = useState("");
+
+  const formatInsertError = (insertError: unknown) => {
+    if (!insertError || typeof insertError !== "object") {
+      return "원인을 확인할 수 없는 전송 실패입니다.";
+    }
+
+    const err = insertError as {
+      status?: number;
+      code?: string;
+      message?: string;
+      details?: string;
+      hint?: string;
+    };
+
+    const parts: string[] = [];
+
+    if (err.status === 409) {
+      parts.push("이미 등록된 에피소드와 중복되어 추가에 실패했습니다.");
+    }
+    if (err.code === "23503") {
+      parts.push(
+        "선택한 program_id가 programs 테이블에 없어 추가에 실패했습니다.",
+      );
+    }
+
+    if (err.code) {
+      parts.push(`코드: ${err.code}`);
+    }
+    if (err.message) {
+      parts.push(`메시지: ${err.message}`);
+    }
+    if (err.details) {
+      parts.push(`상세: ${err.details}`);
+    }
+    if (err.hint) {
+      parts.push(`힌트: ${err.hint}`);
+    }
+
+    return parts.join(" ") || "Supabase 전송 실패(상세 사유 없음).";
+  };
 
   /** RSS 로드 + 파싱 + SQL 생성 */
   const fetchEpisodes = async (
@@ -58,7 +99,14 @@ export function useEpisodeFetch({
       addLog("RSS 수신 완료. 파싱 중...", "info");
 
       const limitNumber = Math.max(1, Number(limit) || 1);
-      const programNumber = Number(programId) || 0;
+      const trimmedProgramId = programId.trim();
+      const parsedProgramId = trimmedProgramId
+        ? Number(trimmedProgramId)
+        : null;
+      const programNumber =
+        parsedProgramId !== null && Number.isFinite(parsedProgramId)
+          ? parsedProgramId
+          : null;
       const parsed = parseRss(
         xmlText,
         limitNumber,
@@ -116,19 +164,77 @@ export function useEpisodeFetch({
       const rowsToInsert = parseSqlToRows(sqlText);
       addLog(`Supabase에 ${rowsToInsert.length}개 항목 전송 중...`, "action");
 
+      // FK 오류를 사용자 친화적으로 안내하기 위해 사전 검증
+      const programIds = Array.from(
+        new Set(
+          rowsToInsert
+            .map((row) => row.program_id)
+            .filter((id): id is number => typeof id === "number"),
+        ),
+      );
+
+      const invalidProgramIds = programIds.filter((id) => id <= 0);
+      if (invalidProgramIds.length > 0) {
+        const message =
+          "program_id가 0 이하입니다. 프로그램 ID를 올바르게 선택한 뒤 다시 시도해주세요.";
+        setError(message);
+        addLog(`Supabase 전송 실패: ${message}`, "error");
+        setProcess("Supabase 전송 실패", "error");
+        setInsertResult("failed");
+        return;
+      }
+
+      if (programIds.length > 0) {
+        const { data: existingPrograms, error: programCheckError } =
+          await supabase.from("programs").select("id").in("id", programIds);
+
+        if (programCheckError) {
+          throw programCheckError;
+        }
+
+        const existingProgramIds = new Set(
+          (existingPrograms ?? []).map((row) => Number(row.id)),
+        );
+        const missingProgramIds = programIds.filter(
+          (id) => !existingProgramIds.has(id),
+        );
+
+        if (missingProgramIds.length > 0) {
+          const message = `program_id ${missingProgramIds.join(", ")}가 programs 테이블에 없습니다. 프로그램 조회 후 존재하는 ID로 다시 시도해주세요.`;
+          setError(message);
+          addLog(`Supabase 전송 실패: ${message}`, "error");
+          setProcess("Supabase 전송 실패", "error");
+          setInsertResult("failed");
+          return;
+        }
+      }
+
       const { error: insertError } = await supabase
         .from("episodes")
         .insert(rowsToInsert);
-      if (insertError) throw insertError;
 
-      setStatus(`Supabase에 ${rowsToInsert.length}개 항목을 추가했습니다.`);
-      addLog("Supabase insert 완료.", "success");
-      setProcess("Supabase 전송 완료", "success");
+      // 409 Conflict (중복) 포함, Supabase 상세 사유를 함께 표시
+      if (insertError) {
+        const message = formatInsertError(insertError);
+        setError(message);
+        addLog(`Supabase 전송 실패: ${message}`, "error");
+        setProcess("Supabase 전송 실패", "error");
+        setInsertResult("failed"); // 실패로 표시하여 재시도 방지
+      } else {
+        setStatus(`Supabase에 ${rowsToInsert.length}개 항목을 추가했습니다.`);
+        addLog("Supabase insert 완료.", "success");
+        setProcess("Supabase 전송 완료", "success");
+        setInsertResult("success"); // 전송 완료 표시
+      }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "추가 실패.";
+      const message =
+        err instanceof Error
+          ? `추가 실패: ${err.message}`
+          : formatInsertError(err);
       setError(message);
-      addLog(`Supabase insert 실패: ${message}`, "error");
+      addLog(`Supabase 전송 실패: ${message}`, "error");
       setProcess("Supabase 전송 실패", "error");
+      setInsertResult("failed"); // 실패로 표시하여 재시도 방지
     } finally {
       setIsSending(false);
     }
@@ -164,7 +270,12 @@ export function useEpisodeFetch({
       audioUrl: mergedItems[index].audioUrl,
     }));
 
-    const programNumber = Number(programId) || 0;
+    const trimmedProgramId = programId.trim();
+    const parsedProgramId = trimmedProgramId ? Number(trimmedProgramId) : null;
+    const programNumber =
+      parsedProgramId !== null && Number.isFinite(parsedProgramId)
+        ? parsedProgramId
+        : null;
 
     setChannelTitle(effectiveChannel);
     setItems(updatedItems);
@@ -254,7 +365,14 @@ export function useEpisodeFetch({
         };
       });
 
-      const programNumber = Number(programId) || 0;
+      const trimmedProgramId = programId.trim();
+      const parsedProgramId = trimmedProgramId
+        ? Number(trimmedProgramId)
+        : null;
+      const programNumber =
+        parsedProgramId !== null && Number.isFinite(parsedProgramId)
+          ? parsedProgramId
+          : null;
       const newSql = buildSqlText(updated, programNumber, language);
       setSqlText(newSql);
 
@@ -321,8 +439,10 @@ export function useEpisodeFetch({
     error,
     isLoading,
     isSending,
+    insertResult,
     setSqlText,
     setChannelOverride,
+    setInsertResult,
     fetchEpisodes,
     insertToSupabase,
     applyChanges,

@@ -22,6 +22,8 @@ interface EpisodeInfoEditorProps {
   convertSummary: { total: number; completed: number; failed: number };
   uploadStates: Record<string, UploadState>;
   uploadSummary: { total: number; completed: number; failed: number };
+  sqlText: string;
+  isSending: boolean;
   onDownload: (url: string, filename: string) => void;
   onStartEditDuration: (filename: string) => void;
   onUpdateEditingDuration: (filename: string, value: string) => void;
@@ -30,7 +32,7 @@ interface EpisodeInfoEditorProps {
   r2Folder: string;
   onR2FolderChange: (v: string) => void;
   onResetToOriginal: () => void;
-  onApplyChanges: () => void;
+  onSendToSupabase: () => void;
 }
 
 export function EpisodeInfoEditor({
@@ -45,6 +47,8 @@ export function EpisodeInfoEditor({
   convertSummary,
   uploadStates,
   uploadSummary,
+  sqlText,
+  isSending,
   onDownload,
   onStartEditDuration,
   onUpdateEditingDuration,
@@ -53,7 +57,7 @@ export function EpisodeInfoEditor({
   r2Folder,
   onR2FolderChange,
   onResetToOriginal,
-  onApplyChanges,
+  onSendToSupabase,
 }: EpisodeInfoEditorProps) {
   return (
     <>
@@ -152,6 +156,7 @@ export function EpisodeInfoEditor({
             className={inputClass}
           />
         </label>
+        
         <div className="col-span-full flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-4">
             <a
@@ -176,9 +181,10 @@ export function EpisodeInfoEditor({
           <button
             className={primaryButtonClass}
             type="button"
-            onClick={onApplyChanges}
+            onClick={onSendToSupabase}
+            disabled={!sqlText.trim() || isSending}
           >
-            변경 반영
+            {isSending ? "Supabase 전송 중..." : "Supabase로 전송"}
           </button>
         </div>
       </div>

@@ -16,17 +16,25 @@ interface EpisodesFetchFormProps {
   language: string;
   programId: string;
   limit: string;
+  r2Folder: string;
   programOptions: { value: string; label: string }[];
   programSearched: boolean;
   programInputMode: "input" | "select";
   isProgramSearching: boolean;
   isLoading: boolean;
+  autoConvertAudio: boolean;
+  autoUploadToR2: boolean;
+  autoSendToSupabase: boolean;
   onRssUrlChange: (v: string) => void;
   onLanguageChange: (v: string) => void;
   onProgramIdChange: (v: string) => void;
   onLimitChange: (v: string) => void;
+  onR2FolderChange: (v: string) => void;
   onProgramSearch: () => void;
   onToggleInputMode: () => void;
+  onAutoConvertAudioChange: (v: boolean) => void;
+  onAutoUploadToR2Change: (v: boolean) => void;
+  onAutoSendToSupabaseChange: (v: boolean) => void;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
   onReset: () => void;
 }
@@ -36,17 +44,25 @@ export function EpisodesFetchForm({
   language,
   programId,
   limit,
+  r2Folder,
   programOptions,
   programSearched,
   programInputMode,
   isProgramSearching,
   isLoading,
+  autoConvertAudio,
+  autoUploadToR2,
+  autoSendToSupabase,
   onRssUrlChange,
   onLanguageChange,
   onProgramIdChange,
   onLimitChange,
+  onR2FolderChange,
   onProgramSearch,
   onToggleInputMode,
+  onAutoConvertAudioChange,
+  onAutoUploadToR2Change,
+  onAutoSendToSupabaseChange,
   onSubmit,
   onReset,
 }: EpisodesFetchFormProps) {
@@ -138,6 +154,72 @@ export function EpisodesFetchForm({
             className={inputClass}
           />
         </label>
+      </div>
+
+      {/* R2 폴더 */}
+      <div className={fieldClass}>
+        <span className={fieldLabelClass}>R2 폴더</span>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={r2Folder}
+            onChange={(e) => onR2FolderChange(e.target.value)}
+            placeholder="오디오 저장 폴더 경로"
+            className={inputClass}
+          />
+          <button
+            className={`${ghostButtonClass} whitespace-nowrap px-3 py-3 flex items-center justify-center text-sm`}
+            type="button"
+            onClick={() => {
+              const url = `https://dash.cloudflare.com/194031f1919f524b4ecbf1ad3c5f60f9/r2/default/buckets/pickle-demo?prefix=${encodeURIComponent(
+                r2Folder.replace(/^\//, ""),
+              )}%2F`;
+              window.open(url, "_blank");
+            }}
+          >
+            바로가기
+          </button>
+        </div>
+      </div>
+
+      {/* 자동화 옵션 */}
+      <div className={fieldClass}>
+        <span className={fieldLabelClass}>자동 진행 설정</span>
+        <div className="flex flex-col gap-3">
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={autoConvertAudio}
+              onChange={(e) => onAutoConvertAudioChange(e.target.checked)}
+              className="w-5 h-5 rounded-lg border-2 border-panel-border bg-surface checked:bg-accent checked:border-accent transition-all accent-yellow-400"
+            />
+            <span className="text-[0.95rem] transition-colors text-ink group-hover:text-accent-strong">
+              확장자 변환
+            </span>
+          </label>
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={autoUploadToR2}
+              onChange={(e) => onAutoUploadToR2Change(e.target.checked)}
+              className="w-5 h-5 rounded-lg border-2 border-panel-border bg-surface checked:bg-accent checked:border-accent transition-all accent-yellow-400"
+            />
+            <span className="text-[0.95rem] transition-colors text-ink group-hover:text-accent-strong">
+              R2 업로드
+            </span>
+          </label>
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={autoSendToSupabase}
+              onChange={(e) => onAutoSendToSupabaseChange(e.target.checked)}
+              className="w-5 h-5 rounded-lg border-2 border-panel-border bg-surface checked:bg-accent checked:border-accent transition-all accent-yellow-400"
+            />
+            <span className="text-[0.95rem] transition-colors text-ink group-hover:text-accent-strong">
+              Supabase 전송
+            </span>
+          </label>
+        </div>
       </div>
 
       {/* 액션 버튼 */}

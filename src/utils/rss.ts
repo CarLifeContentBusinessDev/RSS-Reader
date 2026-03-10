@@ -7,7 +7,7 @@ import { buildSqlText } from "./sql";
 export const parseRss = (
   xmlText: string,
   limit: number,
-  programId: number,
+  programId: number | null,
   language: string,
   r2Folder: string = "de-episodes-audio/program",
 ) => {

@@ -7,7 +7,7 @@ import type {
 
 export const parseSqlToRows = (sqlText: string): EpisodeRow[] => {
   const rowPattern =
-    /\(\s*'((?:''|[^'])*)'\s*,\s*(\d+)\s*,\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*ARRAY\[\s*'((?:''|[^'])*)'\s*\]\s*\)/g;
+    /\(\s*'((?:''|[^'])*)'\s*,\s*(\d+|NULL)\s*,\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*ARRAY\[\s*'((?:''|[^'])*)'\s*\]\s*\)/g;
   const rows: EpisodeRow[] = [];
 
   for (const match of sqlText.matchAll(rowPattern)) {
@@ -15,7 +15,7 @@ export const parseSqlToRows = (sqlText: string): EpisodeRow[] => {
       match;
     rows.push({
       title: titleRaw.replace(/''/g, "'"),
-      program_id: Number(programIdRaw),
+      program_id: programIdRaw === "NULL" ? null : Number(programIdRaw),
       audio_file: audioRaw.replace(/''/g, "'"),
       date: dateRaw.replace(/''/g, "'"),
       duration: durationRaw.replace(/''/g, "'"),
@@ -71,7 +71,7 @@ export const parseProgramSqlToRows = (sqlText: string): ProgramRow[] => {
 
 export const buildSqlText = (
   items: ParsedItem[],
-  programId: number,
+  programId: number | null,
   language: string,
 ) => {
   if (!items.length) return "";
@@ -81,8 +81,12 @@ export const buildSqlText = (
     const safeAudio = entry.r2Url.replace(/'/g, "''");
     const safeDate = entry.date.replace(/'/g, "''");
     const safeDuration = entry.duration.replace(/'/g, "''");
+    const programIdValue =
+      typeof programId === "number" && Number.isFinite(programId)
+        ? String(programId)
+        : "NULL";
     const isLast = index === items.length - 1;
-    return `('${safeTitle}', ${programId}, '${safeAudio}', '${safeDate}', '${safeDuration}', ARRAY['${language}'])${isLast ? "" : ","}`;
+    return `('${safeTitle}', ${programIdValue}, '${safeAudio}', '${safeDate}', '${safeDuration}', ARRAY['${language}'])${isLast ? "" : ","}`;
   });
 
   return `INSERT INTO episodes\n  (title, program_id, audio_file, date, duration, language)\nVALUES\n${sqlLines.join("\n")};`;

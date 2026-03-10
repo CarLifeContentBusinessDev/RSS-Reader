@@ -151,8 +151,10 @@ export function ProgramFetchForm({
               disabled={hasProgram}
               className="w-5 h-5 rounded-lg border-2 border-panel-border bg-surface checked:bg-accent checked:border-accent transition-all accent-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            <span className={`text-[0.95rem] transition-colors ${hasProgram ? "text-ink-muted" : "text-ink group-hover:text-accent-strong"}`}>
-              R2에 자동 업로드
+            <span
+              className={`text-[0.95rem] transition-colors ${hasProgram ? "text-ink-muted" : "text-ink group-hover:text-accent-strong"}`}
+            >
+              R2 업로드
             </span>
           </label>
           <label className="flex items-center gap-3 cursor-pointer group">
@@ -163,8 +165,10 @@ export function ProgramFetchForm({
               disabled={hasProgram}
               className="w-5 h-5 rounded-lg border-2 border-panel-border bg-surface checked:bg-accent checked:border-accent transition-all accent-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            <span className={`text-[0.95rem] transition-colors ${hasProgram ? "text-ink-muted" : "text-ink group-hover:text-accent-strong"}`}>
-              Supabase로 자동 전송
+            <span
+              className={`text-[0.95rem] transition-colors ${hasProgram ? "text-ink-muted" : "text-ink group-hover:text-accent-strong"}`}
+            >
+              Supabase 전송
             </span>
           </label>
         </div>

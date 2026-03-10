@@ -50,34 +50,28 @@ export function ProcessStatus({
   successInfo,
 }: ProcessStatusProps) {
   const [showLogs, setShowLogs] = useState(false);
+  const effectiveTone: Exclude<ProcessTone, "idle"> | null =
+    processState.tone !== "idle" ? processState.tone : error ? "error" : null;
+  const failureReason =
+    effectiveTone === "error" ? error || processState.label : "";
 
   return (
     <>
-      {/* 오류 배너 */}
-      {error && (
-        <div className="mt-4 rounded-2xl border border-[rgba(255,120,120,0.4)] bg-[rgba(255,120,120,0.18)] p-4 text-[#742b2b]">
-          {error}
-        </div>
-      )}
-
       {/* 프로세스 상태 배너 */}
-      {processState.tone !== "idle" && (
+      {effectiveTone && (
         <div
           className={`mt-4 rounded-2xl border p-4 flex items-center justify-between gap-4 ${
-            PROCESS_STYLE[processState.tone as Exclude<ProcessTone, "idle">]
-              ?.border
-          } ${
-            PROCESS_STYLE[processState.tone as Exclude<ProcessTone, "idle">]?.bg
-          } ${
-            PROCESS_STYLE[processState.tone as Exclude<ProcessTone, "idle">]
-              ?.text
+            PROCESS_STYLE[effectiveTone]?.border
+          } ${PROCESS_STYLE[effectiveTone]?.bg} ${
+            PROCESS_STYLE[effectiveTone]?.text
           }`}
         >
           <div className="flex-1 flex items-center gap-2">
-            <div>
-              {PROCESS_ICON[processState.tone as Exclude<ProcessTone, "idle">]}
-            </div>
-            {successInfo && processState.tone === "success" && (
+            <div>{PROCESS_ICON[effectiveTone]}</div>
+            {effectiveTone === "error" && failureReason && (
+              <div className="text-sm opacity-95">{failureReason}</div>
+            )}
+            {successInfo && effectiveTone === "success" && (
               <div className="text-sm opacity-90">{successInfo}</div>
             )}
           </div>

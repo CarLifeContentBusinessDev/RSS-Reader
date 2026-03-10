@@ -37,7 +37,7 @@ export function useAudioUpload({ addLog, setProcess }: UseAudioUploadOptions) {
     convertStates: Record<string, ConvertState>,
     r2Folder: string,
     channelTitle: string,
-  ): Promise<Record<string, string>> => {
+  ): Promise<{ urlMap: Record<string, string>; hasError: boolean }> => {
     setProcess("R2 업로드 중", "working");
     addLog(`R2 업로드 시작 (${items.length}개)`, "action");
 
@@ -110,7 +110,7 @@ export function useAudioUpload({ addLog, setProcess }: UseAudioUploadOptions) {
       hasError ? "error" : "success",
     );
 
-    return urlMap;
+    return { urlMap, hasError };
   };
 
   const getUploadSummary = (items: ParsedItem[]) => ({

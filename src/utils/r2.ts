@@ -18,7 +18,7 @@ export const buildItemsWithChannel = (
   return baseItems.map((item, index) => {
     const extCandidate = item.audioUrl.split(".").pop()?.split("?")[0] || "mp3";
     const ext = extCandidate.length > 4 ? "mp3" : extCandidate || "mp3";
-    const filename = `${channelTitle}-${index + 1}.${ext}`;
+    const filename = `[${sanitizePathSegment(channelTitle)}]${sanitizePathSegment(item.title)}.${ext}`;
     const trimmedFolder = folder.trim().replace(/^\/+|\/+$/g, "");
     // 각 세그먼트만 인코딩
     const folderPath = trimmedFolder

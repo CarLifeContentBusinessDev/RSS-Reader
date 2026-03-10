@@ -1,6 +1,6 @@
 export type EpisodeRow = {
   title: string;
-  program_id: number;
+  program_id: number | null;
   audio_file: string;
   date: string;
   duration: string;
