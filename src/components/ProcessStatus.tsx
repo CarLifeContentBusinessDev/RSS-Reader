@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { LogEntry } from "../types";
 import type { ProcessTone } from "../hooks/useProcessLog";
 
@@ -5,6 +6,7 @@ interface ProcessStatusProps {
   logs: LogEntry[];
   processState: { label: string; tone: ProcessTone };
   error?: string;
+  successInfo?: string;
 }
 
 const LOG_DOT_COLOR: Record<string, string> = {
@@ -45,7 +47,10 @@ export function ProcessStatus({
   logs,
   processState,
   error,
+  successInfo,
 }: ProcessStatusProps) {
+  const [showLogs, setShowLogs] = useState(false);
+
   return (
     <>
       {/* 오류 배너 */}
@@ -55,9 +60,42 @@ export function ProcessStatus({
         </div>
       )}
 
+      {/* 프로세스 상태 배너 */}
+      {processState.tone !== "idle" && (
+        <div
+          className={`mt-4 rounded-2xl border p-4 flex items-center justify-between gap-4 ${
+            PROCESS_STYLE[processState.tone as Exclude<ProcessTone, "idle">]
+              ?.border
+          } ${
+            PROCESS_STYLE[processState.tone as Exclude<ProcessTone, "idle">]?.bg
+          } ${
+            PROCESS_STYLE[processState.tone as Exclude<ProcessTone, "idle">]
+              ?.text
+          }`}
+        >
+          <div className="flex-1 flex items-center gap-2">
+            <div>
+              {PROCESS_ICON[processState.tone as Exclude<ProcessTone, "idle">]}
+            </div>
+            {successInfo && processState.tone === "success" && (
+              <div className="text-sm opacity-90">{successInfo}</div>
+            )}
+          </div>
+          {logs.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowLogs(!showLogs)}
+              className="text-xs opacity-70 hover:opacity-100 transition-opacity"
+            >
+              {showLogs ? "▲ 숨기기" : "▼ 상세"}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* 로그 패널 */}
-      {logs.length > 0 && (
-        <div className="mt-6 grid gap-3 rounded-[18px] border border-panel-border bg-surface p-5">
+      {logs.length > 0 && showLogs && (
+        <div className="mt-3 grid gap-3 rounded-[18px] border border-panel-border bg-surface p-5">
           <div
             className="max-h-65 overflow-y-auto rounded-2xl border border-[rgba(16,35,35,0.08)] bg-[#f6f4ef] p-4"
             aria-live="polite"
@@ -78,23 +116,6 @@ export function ProcessStatus({
               ))}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* 프로세스 상태 배너 */}
-      {processState.tone !== "idle" && (
-        <div
-          className={`mt-4 rounded-2xl border p-4 ${
-            PROCESS_STYLE[processState.tone as Exclude<ProcessTone, "idle">]
-              ?.border
-          } ${
-            PROCESS_STYLE[processState.tone as Exclude<ProcessTone, "idle">]?.bg
-          } ${
-            PROCESS_STYLE[processState.tone as Exclude<ProcessTone, "idle">]
-              ?.text
-          }`}
-        >
-          {PROCESS_ICON[processState.tone as Exclude<ProcessTone, "idle">]}
         </div>
       )}
     </>

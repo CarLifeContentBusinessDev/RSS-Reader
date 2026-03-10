@@ -12,13 +12,10 @@ import {
   DEFAUKLT_LANGUAGE,
   PROGRAM_GUIDE_STEPS,
 } from "../constants/options";
-import {
-  ghostButtonClass,
-  panelClass,
-  primaryButtonClass,
-} from "../constants/style";
+import { ghostButtonClass, panelClass } from "../constants/style";
 import { useAuthGuard } from "../hooks/useAuthGuard";
 import { useImageDownload } from "../hooks/useImageDownload";
+import { buildProgramSqlText } from "../utils/sql";
 import { useProcessLog } from "../hooks/useProcessLog";
 import { useProgramFetch } from "../hooks/useProgramFetch";
 import { useProgramOptions } from "../hooks/useProgramOptions";
@@ -41,6 +38,8 @@ const ProgramsPage = ({
   const [imageFolder, setImageFolder] = useState(
     buildImageFolder(DEFAUKLT_LANGUAGE),
   );
+  const [autoUploadToR2, setAutoUploadToR2] = useState(false);
+  const [autoSendToSupabase, setAutoSendToSupabase] = useState(false);
 
   useEffect(() => {
     setImageFolder(buildImageFolder(language));
@@ -72,8 +71,11 @@ const ProgramsPage = ({
     error,
     isLoading,
     isSending,
+    insertResult,
+    setInsertResult,
     setTitle,
     setSubtitle,
+    setImgUrl,
     setSqlText,
     fetchProgram,
     insertToSupabase,
@@ -99,6 +101,38 @@ const ProgramsPage = ({
   const [isCompressing, setIsCompressing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadDone, setUploadDone] = useState(false);
+
+  // title, subtitle 변경 시 자동으로 SQL 재생성
+  useEffect(() => {
+    if (title || subtitle) {
+      rebuildSql(imageFolder);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, subtitle, imageFolder]);
+
+  // 자동 R2 업로드
+  useEffect(() => {
+    if (autoUploadToR2 && compressedBlob && !uploadDone && !isUploading) {
+      console.log("🚀 자동 R2 업로드 시작");
+      handleUploadImage();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoUploadToR2, compressedBlob, uploadDone, isUploading]);
+
+  // 자동 Supabase 전송
+  useEffect(() => {
+    if (
+      autoSendToSupabase &&
+      uploadDone &&
+      sqlText.trim() &&
+      !isSending &&
+      !insertResult
+    ) {
+      console.log("🚀 자동 Supabase 전송 시작");
+      handleInsert();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSendToSupabase, uploadDone, sqlText, isSending, insertResult]);
 
   // 프로그램 불러오기 완료 시 자동 압축
   useEffect(() => {
@@ -166,6 +200,30 @@ const ProgramsPage = ({
     setUploadDone(false);
   };
 
+  const handleRetrySend = () => {
+    setInsertResult("");
+  };
+
+  const handleImgUrlChange = (newImgUrl: string) => {
+    setImgUrl(newImgUrl);
+    // imgUrl 변경 시 SQL 재생성 (title과 subtitle은 현재 값 유지)
+    if (title) {
+      setSqlText(
+        buildProgramSqlText(
+          {
+            title: title.trim() || "제목 없음",
+            subtitle: subtitle.trim(),
+            imgUrl: newImgUrl,
+          },
+          type,
+          language,
+          categoryId || undefined,
+          broadcastingId || undefined,
+        ),
+      );
+    }
+  };
+
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     guard(MESSAGES.LOGIN_REQUIRED_FETCH, () => {
@@ -183,6 +241,8 @@ const ProgramsPage = ({
     setType("podcast");
     setLanguage(DEFAUKLT_LANGUAGE);
     setImageFolder(buildImageFolder(DEFAUKLT_LANGUAGE));
+    setAutoUploadToR2(false);
+    setAutoSendToSupabase(false);
     resetFields();
     clearLogs();
     setCompressedBlob(null);
@@ -208,21 +268,36 @@ const ProgramsPage = ({
           rssUrl={rssUrl}
           type={type}
           language={language}
+          imageFolder={imageFolder}
           categoryId={categoryId}
           broadcastingId={broadcastingId}
           categoryOptions={categoryOptions}
           broadcastingOptions={broadcastingOptions}
           optionsLoading={optionsLoading}
           isLoading={isLoading}
+          autoUploadToR2={autoUploadToR2}
+          autoSendToSupabase={autoSendToSupabase}
+          hasProgram={!!title}
           onRssUrlChange={setRssUrl}
           onTypeChange={setType}
           onLanguageChange={setLanguage}
+          onImageFolderChange={setImageFolder}
           onCategoryChange={setCategoryId}
           onBroadcastingChange={setBroadcastingId}
+          onAutoUploadChange={setAutoUploadToR2}
+          onAutoSendChange={setAutoSendToSupabase}
           onSubmit={handleSubmit}
           onReset={handleReset}
         />
-        <ProcessStatus logs={logs} processState={processState} error={error} />
+        <ProcessStatus
+          logs={logs}
+          processState={processState}
+          error={error}
+          successInfo={
+            insertResult &&
+            ` - ${title} (ID: ${insertResult.replace("program_id : ", "")})`
+          }
+        />
       </section>
 
       <section className={`${panelClass} grid gap-6`}>
@@ -242,13 +317,6 @@ const ProgramsPage = ({
             >
               {LABELS.BUTTON.RESTORE}
             </button>
-            <button
-              className={primaryButtonClass}
-              onClick={handleInsert}
-              disabled={!sqlText.trim() || isSending}
-            >
-              {isSending ? LABELS.BUTTON.SENDING : LABELS.BUTTON.SEND_SUPABASE}
-            </button>
           </div>
         </div>
 
@@ -259,20 +327,22 @@ const ProgramsPage = ({
               subtitle={subtitle}
               sourceImgUrl={sourceImgUrl}
               imgUrl={imgUrl}
-              imageFolder={imageFolder}
-              language={language}
               isCompressing={isCompressing}
               isUploading={isUploading}
               uploadDone={uploadDone}
               compressedBlob={compressedBlob}
               compressedFilename={compressedFilename}
               compressedSize={compressedSize}
+              sqlText={sqlText}
+              isSending={isSending}
+              insertResult={insertResult}
               onTitleChange={setTitle}
               onSubtitleChange={setSubtitle}
-              onImageFolderChange={setImageFolder}
-              onApply={() => rebuildSql(imageFolder)}
+              onImgUrlChange={handleImgUrlChange}
               onUpload={handleUploadImage}
               onRetryUpload={handleRetryUpload}
+              onSendToSupabase={handleInsert}
+              onRetrySend={handleRetrySend}
             />
             <SqlOutput
               value={sqlText}

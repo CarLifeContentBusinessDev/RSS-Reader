@@ -150,7 +150,7 @@ export function useProgramFetch({
           .map((row) => String(row.id))
           .filter((v) => v !== "undefined" && v !== "null")
           .join(", ");
-        addLog(`생성된 ID: ${ids}`, "success");
+        addLog(`✨ 프로그램 추가 완료 - ${title} (ID: ${ids})`, "success");
         setInsertResult(`program_id : ${ids}`);
       }
       setProcess("Supabase 전송 완료", "success");
@@ -239,7 +239,9 @@ export function useProgramFetch({
     isSending,
     setTitle,
     setSubtitle,
+    setImgUrl,
     setSqlText,
+    setInsertResult,
     fetchProgram,
     insertToSupabase,
     rebuildSql,

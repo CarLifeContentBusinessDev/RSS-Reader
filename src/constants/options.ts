@@ -22,6 +22,25 @@ export const buildEpisodeFolder = (language: string) =>
       ? "/jp_episodes-audio"
       : `/${language}-episodes-audio/episodes`;
 
+export const PROGRAM_GUIDE_STEPS = [
+  {
+    step: "1",
+    text: "RSS URL, Type, Language 입력 - Category / Broadcasting ID는 Language 기준으로 자동 조회 (선택 사항)",
+  },
+  {
+    step: "2",
+    text: "프로그램 불러오기 클릭 - RSS 채널 정보 파싱 후 SQL 자동 생성",
+  },
+  {
+    step: "3",
+    text: "정보 확인 및 수정 - 자동 이미지 변환/압축 → R2업로드",
+  },
+  {
+    step: "4",
+    text: "Supabase로 전송 - SQL 출력 콘솔 기준으로 programs 테이블에 insert",
+  },
+];
+
 export const EPISODE_GUIDE_STEPS = [
   {
     step: "1",
@@ -45,24 +64,5 @@ export const EPISODE_GUIDE_STEPS = [
   {
     step: "5",
     text: "Supabase로 전송 - episodes 테이블에 insert",
-  },
-];
-
-export const PROGRAM_GUIDE_STEPS = [
-  {
-    step: "1",
-    text: "RSS URL, Type, Language 입력 - Category / Broadcasting ID는 Language 기준으로 자동 조회 (선택 사항)",
-  },
-  {
-    step: "2",
-    text: "프로그램 불러오기 클릭 - RSS 채널 정보 파싱 후 SQL 자동 생성",
-  },
-  {
-    step: "3",
-    text: "정보 확인 및 수정 - 자동 이미지 변환/압축 → 업로드 → R2 확인 → 변경 반영",
-  },
-  {
-    step: "4",
-    text: "Supabase로 전송 - SQL 출력 콘솔 기준으로 programs 테이블에 insert",
   },
 ];
