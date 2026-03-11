@@ -15,7 +15,7 @@ export const buildItemsWithChannel = (
   if (language === "en") {
     folder = "/en-episodes-audio/episodes";
   }
-  return baseItems.map((item, index) => {
+  return baseItems.map((item) => {
     const extCandidate = item.audioUrl.split(".").pop()?.split("?")[0] || "mp3";
     const ext = extCandidate.length > 4 ? "mp3" : extCandidate || "mp3";
     const filename = `[${sanitizePathSegment(channelTitle)}]${sanitizePathSegment(item.title)}.${ext}`;
