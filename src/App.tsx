@@ -175,8 +175,6 @@ function App() {
                   setShowAuthModal(true);
                 }}
                 showToast={showToast}
-                status=""
-                setStatus={() => {}}
               />
             }
           />
