@@ -84,17 +84,19 @@ export default async function handler(
     await new Promise<void>((resolve, reject) => {
       ffmpeg(mp3Path)
         .audioCodec("aac")
-        .audioBitrate("32k")
-        .audioChannels(1)
-        .audioFrequency(22050)
+        .audioBitrate("192k")
+        .audioChannels(2)
+        .audioFrequency(44100)
         .noVideo()
-        .outputOptions(["-movflags faststart"]) // mp4 컨테이너 시작 위치 최적화
+        .outputOptions([
+          "-movflags faststart", // 스트리밍/빠른 재생 최적화
+          "-profile:a aac_low", // 가장 호환성 높은 AAC-LC 프로필 사용
+        ])
         .output(m4aPath)
         .on("end", () => resolve())
         .on("error", (err) => reject(new HttpError(500, err.message)))
         .run();
     });
-
     const convertTime = Date.now() - convertStart;
     console.log(`[convertAudio] 변환 완료 (${convertTime}ms)`);
 

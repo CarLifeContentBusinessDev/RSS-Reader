@@ -10,6 +10,11 @@ export const LABELS = {
       DESCRIPTION:
         "RSS에서 에피소드 정보를 가져와 episodes 테이블에 추가합니다.",
     },
+    AUDIO_REMAPPING: {
+      TITLE: "Audio Remapping",
+      DESCRIPTION:
+        "엑셀의 프로그램과 RSS정보를 이용해 에피소드의 오디오 파일을 재매핑합니다.",
+    },
   },
 
   // 섹션 헤더

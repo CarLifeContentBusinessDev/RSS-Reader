@@ -67,3 +67,10 @@ export const EPISODE_GUIDE_STEPS = [
     text: "Supabase로 전송 - episodes 테이블에 데이터 추가",
   },
 ];
+
+export const AUDIO_REMAPPING_GUIDE_STEPS = [
+  {
+    step: "1",
+    text: "엑셀 파일 업로드 - 시트와 적용할 행 범위 입력",
+  },
+];

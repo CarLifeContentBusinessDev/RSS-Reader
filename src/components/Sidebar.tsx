@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 const MENU_LINK = [
   { name: "프로그램", href: "/" },
   { name: "에피소드", href: "/episodes" },
+  { name: "오디오파일 재매핑", href: "/audio-remapping" },
 ];
 
 const NAV_LINK = [

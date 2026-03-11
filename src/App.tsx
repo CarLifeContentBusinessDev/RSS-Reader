@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Routes, Route } from "react-router-dom";
-import { supabase } from "./lib/supabaseClient";
-import EpisodesPage from "./pages/EpisodesPage";
-import ProgramsPage from "./pages/ProgramsPage";
+import { Route, Routes } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
+import { supabase } from "./lib/supabaseClient";
+import AudioRemappingPage from "./pages/AudioRemappingPage";
+import EpisodesPage from "./pages/EpisodesPage";
+import ProgramsPage from "./pages/ProgramsPage";
 import type { ToastTone } from "./types";
 
 const primaryButtonClass =
@@ -153,6 +154,21 @@ function App() {
             path="/episodes"
             element={
               <EpisodesPage
+                authUserEmail={authUserEmail}
+                onRequireLogin={() => {
+                  setAuthError("");
+                  setShowAuthModal(true);
+                }}
+                showToast={showToast}
+                status=""
+                setStatus={() => {}}
+              />
+            }
+          />
+          <Route
+            path="/audio-remapping"
+            element={
+              <AudioRemappingPage
                 authUserEmail={authUserEmail}
                 onRequireLogin={() => {
                   setAuthError("");
