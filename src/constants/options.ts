@@ -71,6 +71,10 @@ export const EPISODE_GUIDE_STEPS = [
 export const AUDIO_REMAPPING_GUIDE_STEPS = [
   {
     step: "1",
-    text: "엑셀 파일 업로드 - 시트와 적용할 행 범위 입력",
+    text: "엑셀 파일 업로드 - 시트와 적용 범위 입력",
+  },
+  {
+    step: "2",
+    text: "작업 시작 - 등록된 에피소드를 RSS에서 조회하여 일치하는 항목에 대해 오디오 변환 및 URL 업데이트",
   },
 ];
