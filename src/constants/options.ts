@@ -70,6 +70,10 @@ export const EPISODE_GUIDE_STEPS = [
 
 export const AUDIO_REMAPPING_GUIDE_STEPS = [
   {
+    step: "🚨",
+    text: "대용량 파일로 작업 시 변환 시간 초과로 실패할 수 있기 때문에 local에서 작업하는 것을 권장합니다.",
+  },
+  {
     step: "1",
     text: "엑셀 파일 업로드 - 시트와 적용 범위 입력",
   },

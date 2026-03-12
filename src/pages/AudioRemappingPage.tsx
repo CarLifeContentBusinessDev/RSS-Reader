@@ -148,7 +148,7 @@ const AudioRemappingPage = ({
           });
           return obj;
         });
-        setSheetData(dataRows);
+        setSheetData([...dataRows]);
       };
       reader.readAsArrayBuffer(file);
     },
@@ -171,7 +171,7 @@ const AudioRemappingPage = ({
         const lastRow = rows.length + 2;
         setExcelStartRow(4);
         setExcelEndRow(lastRow);
-        setIsAllRows(true);
+        setIsAllRows(false); // 항상 해제
         setRawRows(rows);
       }
     };
@@ -198,6 +198,7 @@ const AudioRemappingPage = ({
 
   const handleSheetChange = (sheetName: string) => {
     setSelectedSheet(sheetName);
+    setIsAllRows(false); // 시트 변경 시 항상 해제
     if (excelFile) {
       updateRangeAutomatically(excelFile, sheetName);
     }
@@ -205,6 +206,7 @@ const AudioRemappingPage = ({
 
   const handleRemapAll = useCallback(async () => {
     if (isProcessing) return;
+    // sheetData는 이미 최신 범위로 반영된 상태에서 작업 시작
     setIsProcessing(true);
     setProcessResults([]); // 이전 결과 초기화
     setLogs([
@@ -213,29 +215,57 @@ const AudioRemappingPage = ({
         type: "info",
       },
     ]);
+    // 작업 시작 시 excelFile, rawRows, sheetData 등은 초기화하지 않음 (상태 유지)
 
     const language = sheetData[0]?.language || DEFAUKLT_LANGUAGE;
     let totalEpisodesCount = 0;
-    let completedEpisodesCount = 0;
+    let processedEpisodesCount = 0;
     const currentResults: ProcessResult[] = [];
 
     try {
       for (let i = 0; i < sheetData.length; i++) {
         const row = sheetData[i];
-        const programIdx = i + 1;
-        const programTotal = sheetData.length;
         const channelName = String(row["채널명"] || "").trim();
         const rssUrl = String(row["RSS"] || "").trim();
+        const programIdx = i + 1;
+        const programTotal = sheetData.length;
 
         try {
           if (!channelName || !rssUrl) throw new Error("데이터 부족");
 
-          const { data: prog } = await supabase
+          // 프로그램명 normalize 비교로 변경
+          const { data: allPrograms, error: progListErr } = await supabase
             .from("programs")
-            .select("id")
-            .eq("title", channelName)
-            .maybeSingle();
-          if (!prog) throw new Error(`${channelName} 프로그램 찾기 실패`);
+            .select("id, title");
+          if (progListErr || !allPrograms)
+            throw new Error("프로그램 목록 조회 실패");
+          const normChannel = normalizeTitle(channelName);
+          let prog = allPrograms.find(
+            (p: any) => normalizeTitle(p.title) === normChannel,
+          );
+          // 타이틀로 못 찾으면 program_id(C열)로 재시도
+          if (!prog && row["program_id"]) {
+            prog = allPrograms.find(
+              (p: any) => String(p.id) === String(row["program_id"]),
+            );
+          }
+          if (!prog) {
+            // 실패도 결과 요약에 추가
+            setLogs((prev) => [
+              ...prev,
+              {
+                message: `❌ ${channelName} 프로그램 에러: 프로그램 찾기 실패`,
+                type: "error",
+              },
+            ]);
+            currentResults.push({
+              program: channelName,
+              episode: "-",
+              status: "failed",
+              reason: "프로그램 찾기 실패",
+            });
+            return; // 이 row는 스킵
+          }
 
           const { data: episodes } = await supabase
             .from("episodes")
@@ -256,11 +286,12 @@ const AudioRemappingPage = ({
 
           totalEpisodesCount += episodes.length;
 
+          let episodeProcessed = 0;
           await Promise.all(
             episodes.map(async (episode, j) => {
-              const epPrefix = `[P ${programIdx}/${programTotal}] [E ${j + 1}/${episodes.length}]`;
               const epTitle = episode.title || "Unknown Title";
-
+              const episodeIdx = j + 1;
+              const episodeTotal = episodes.length;
               try {
                 const epNorm = normalizeTitle(epTitle);
                 const epDate = formatDate(episode.date);
@@ -328,11 +359,12 @@ const AudioRemappingPage = ({
 
                 if (updateErr) throw updateErr;
 
-                completedEpisodesCount++;
+                processedEpisodesCount++;
+                episodeProcessed++;
                 setLogs((prev) => [
                   ...prev,
                   {
-                    message: `${epPrefix} ✅ [${epTitle}] 완료`,
+                    message: `[${programIdx}-${episodeIdx}][P ${programIdx}/${programTotal}][E ${episodeProcessed}/${episodeTotal}] ✅ [${epTitle}] 완료`,
                     type: "success",
                   },
                 ]);
@@ -342,10 +374,12 @@ const AudioRemappingPage = ({
                   status: "success",
                 });
               } catch (err: any) {
+                processedEpisodesCount++;
+                episodeProcessed++;
                 setLogs((prev) => [
                   ...prev,
                   {
-                    message: `${epPrefix} ❌ [${epTitle}] 실패: ${err.message}`,
+                    message: `[${programIdx}-${episodeIdx}][P ${programIdx}/${programTotal}][E ${episodeProcessed}/${episodeTotal}] ❌ [${epTitle}] 실패: ${err.message}`,
                     type: "error",
                   },
                 ]);
@@ -373,11 +407,12 @@ const AudioRemappingPage = ({
       setLogs((prev) => [
         ...prev,
         {
-          message: `🎉 작업 종료 (성공: ${completedEpisodesCount}/${totalEpisodesCount})`,
+          message: `🎉 작업 종료 (성공: ${processedEpisodesCount}/${totalEpisodesCount})`,
           type: "success",
         },
       ]);
       setProcessResults(currentResults);
+      // 작업 종료 후에도 excelFile, rawRows, sheetData 등은 초기화하지 않음 (상태 유지)
     }
   }, [sheetData, convertAll, uploadAll, isProcessing]);
 
@@ -472,7 +507,7 @@ const AudioRemappingPage = ({
                 <span className={fieldLabelClass}>
                   적용 범위 (엑셀 행 번호)
                 </span>
-                <div className="flex items-center">
+                <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
                     checked={isAllRows}
@@ -499,9 +534,10 @@ const AudioRemappingPage = ({
                   min={4}
                   value={excelStartRow ?? ""}
                   onChange={(e) => {
-                    setExcelStartRow(
-                      e.target.value ? Number(e.target.value) : undefined,
-                    );
+                    const newStart = e.target.value
+                      ? Number(e.target.value)
+                      : undefined;
+                    setExcelStartRow(newStart);
                     setIsAllRows(false);
                   }}
                   className={inputClass + " w-24"}
@@ -514,9 +550,10 @@ const AudioRemappingPage = ({
                   max={rawRows.length + 2}
                   value={excelEndRow ?? ""}
                   onChange={(e) => {
-                    setExcelEndRow(
-                      e.target.value ? Number(e.target.value) : undefined,
-                    );
+                    const newEnd = e.target.value
+                      ? Number(e.target.value)
+                      : undefined;
+                    setExcelEndRow(newEnd);
                     setIsAllRows(false);
                   }}
                   className={inputClass + " w-24"}
