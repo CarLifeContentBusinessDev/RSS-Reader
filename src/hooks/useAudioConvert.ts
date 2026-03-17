@@ -2,6 +2,15 @@ import { useState } from "react";
 import type { ParsedItem, LogTone } from "../types";
 import type { ProcessTone } from "./useProcessLog";
 
+type ConvertLogContext = {
+  channelName?: string;
+  episodeTitle?: string;
+  programIndex?: number;
+  programTotal?: number;
+  episodeIndex?: number;
+  episodeTotal?: number;
+};
+
 export type ConvertStatus = "idle" | "converting" | "done" | "error";
 
 export interface ConvertState {
@@ -83,6 +92,9 @@ export function useAudioConvert({
             body: JSON.stringify({
               url: item.audioUrl,
               filename: item.filename.replace(/\.mp3$/i, ".m4a"),
+              logContext: (
+                item as ParsedItem & { logContext?: ConvertLogContext }
+              ).logContext,
             }),
           });
 

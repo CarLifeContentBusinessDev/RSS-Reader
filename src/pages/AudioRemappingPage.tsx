@@ -265,8 +265,6 @@ const AudioRemappingPage = ({
     // 작업 시작 시 excelFile, rawRows, sheetData 등은 초기화하지 않음 (상태 유지)
 
     const language = sheetData[0]?.language || DEFAUKLT_LANGUAGE;
-    let totalEpisodesCount = 0;
-    let processedEpisodesCount = 0;
     const currentResults: ProcessResult[] = [];
 
     try {
@@ -308,7 +306,7 @@ const AudioRemappingPage = ({
               status: "failed",
               reason: "프로그램 찾기 실패",
             });
-            return; // 이 row는 스킵
+            continue; // 이 row는 스킵하고 다음 프로그램으로 진행
           }
 
           const { data: episodes } = await supabase
@@ -327,8 +325,6 @@ const AudioRemappingPage = ({
             prog.id,
             "ko",
           ) as { items: ParsedItem[] };
-
-          totalEpisodesCount += episodes.length;
 
           let episodeProcessed = 0;
           const processEpisode = async (episode: any, episodeIdx: number) => {
@@ -366,7 +362,18 @@ const AudioRemappingPage = ({
               const mp3Filename = `${epSafeTitle}.mp3`;
 
               const convResult = await convertAll([
-                { ...matchedRss, filename: mp3Filename } as any,
+                {
+                  ...matchedRss,
+                  filename: mp3Filename,
+                  logContext: {
+                    channelName,
+                    episodeTitle: epTitle,
+                    programIndex: programIdx,
+                    programTotal,
+                    episodeIndex: episodeIdx,
+                    episodeTotal,
+                  },
+                } as any,
               ]);
               const rawResult = convResult[mp3Filename];
               const base64 =
@@ -400,7 +407,6 @@ const AudioRemappingPage = ({
 
               if (updateErr) throw updateErr;
 
-              processedEpisodesCount++;
               episodeProcessed++;
               appendLog(
                 `[채널:${channelName}][${programIdx}-${episodeIdx}][P ${programIdx}/${programTotal}][E ${episodeProcessed}/${episodeTotal}] ✅ [${epTitle}] 완료`,
@@ -412,7 +418,6 @@ const AudioRemappingPage = ({
                 status: "success",
               });
             } catch (err: any) {
-              processedEpisodesCount++;
               episodeProcessed++;
               appendLog(
                 `[채널:${channelName}][${programIdx}-${episodeIdx}][P ${programIdx}/${programTotal}][E ${episodeProcessed}/${episodeTotal}] ❌ [${epTitle}] 실패: ${err.message}`,
@@ -452,9 +457,18 @@ const AudioRemappingPage = ({
     } finally {
       setIsProcessing(false);
       setHasCompletedRun(true);
+      const successCount = currentResults.filter(
+        (result) => result.status === "success",
+      ).length;
+      const failedCount = currentResults.filter(
+        (result) => result.status === "failed",
+      ).length;
+      const totalCount = currentResults.length;
       appendLog(
-        `🎉 작업 종료 (성공: ${processedEpisodesCount}/${totalEpisodesCount})`,
-        "success",
+        failedCount > 0
+          ? `⚠️ 작업 종료 (성공: ${successCount}건, 실패: ${failedCount}건, 전체: ${totalCount}건)`
+          : `🎉 작업 종료 (성공: ${successCount}건, 전체: ${totalCount}건)`,
+        failedCount > 0 ? "error" : "success",
       );
       setProcessResults(currentResults);
       // 작업 종료 후에도 excelFile, rawRows, sheetData 등은 초기화하지 않음 (상태 유지)
