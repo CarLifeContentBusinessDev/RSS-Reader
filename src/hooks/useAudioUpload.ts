@@ -52,6 +52,7 @@ export function useAudioUpload({ addLog, setProcess }: UseAudioUploadOptions) {
     let hasError = false;
 
     for (const item of items) {
+      // 인코딩되지 않은 원본 값만 사용
       const m4aFilename = item.filename.replace(/\.(mp3|m4a)$/i, ".m4a");
       const mp3Key = item.filename.replace(/\.m4a$/i, ".mp3");
       const convertState =
@@ -70,6 +71,7 @@ export function useAudioUpload({ addLog, setProcess }: UseAudioUploadOptions) {
       updateState(item.filename, { status: "uploading" });
       addLog(`업로드 중: ${m4aFilename}`, "action");
 
+      // folder, filename 모두 인코딩 없이 원본 값만 전달
       const folder = `${r2Folder.replace(/^\/+/, "")}/${channelTitle}`;
 
       try {

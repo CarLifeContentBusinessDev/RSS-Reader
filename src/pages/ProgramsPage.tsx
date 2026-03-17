@@ -13,6 +13,8 @@ import {
   PROGRAM_GUIDE_STEPS,
 } from "../constants/options";
 import { ghostButtonClass, panelClass } from "../constants/style";
+import { BASE_URL } from "../constants/options";
+import { buildR2ImageUrl } from "../utils/r2";
 import { useAuthGuard } from "../hooks/useAuthGuard";
 import { useImageDownload } from "../hooks/useImageDownload";
 import { buildProgramSqlText } from "../utils/sql";
@@ -297,6 +299,10 @@ const ProgramsPage = ({
       );
       if (result) {
         setUploadDone(true);
+        // 업로드 성공 시 안전한 R2 이미지 URL 생성 (파일명 인코딩)
+        setImgUrl(
+          buildR2ImageUrl(title, BASE_URL, imageFolder, "webp", language),
+        );
         showToast("R2 업로드 완료!", "success");
       }
     } finally {

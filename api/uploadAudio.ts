@@ -57,7 +57,14 @@ export default async function handler(
   });
 
   const fileBuffer = Buffer.from(file, "base64");
-  const key = folder ? `${folder.replace(/^\/+/, "")}/${filename}` : filename;
+  // 폴더/파일명 인코딩 없이 원본 문자열 그대로 사용
+  let key = "";
+  if (folder) {
+    const trimmedFolder = folder.replace(/^\/+/, "").replace(/\/+$/g, "");
+    key = `${trimmedFolder}/${filename}`;
+  } else {
+    key = filename;
+  }
 
   try {
     await s3.send(
@@ -70,7 +77,7 @@ export default async function handler(
     );
 
     const baseUrl = R2_PUBLIC_BASE_URL || R2_ENDPOINT;
-    const url = `${baseUrl}/${key}`;
+    const url = `${baseUrl}/${encodeURIComponent(key).replace(/%2F/g, "/")}`;
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({ url }));

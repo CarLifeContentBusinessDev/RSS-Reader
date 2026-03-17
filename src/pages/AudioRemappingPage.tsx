@@ -73,10 +73,12 @@ const AudioRemappingPage = ({
   const [isAllRows, setIsAllRows] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [hasCompletedRun, setHasCompletedRun] = useState(false);
   // 성공/실패 통합 결과 리스트
   const [processResults, setProcessResults] = useState<ProcessResult[]>([]);
 
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { convertAll } = useAudioConvert({
     addLog: (msg) =>
@@ -97,6 +99,21 @@ const AudioRemappingPage = ({
     "채널명",
     "RSS",
   ];
+  const MAX_EPISODE_CONCURRENCY = 5;
+
+  const appendLog = (message: string, type: LogEntry["type"] = "info") => {
+    setLogs((prev) => [...prev, { message, type }]);
+    const prefix = `[AudioRemap][${type.toUpperCase()}]`;
+    if (type === "error") {
+      console.error(`${prefix} ${message}`);
+      return;
+    }
+    if (type === "success") {
+      console.log(`${prefix} ${message}`);
+      return;
+    }
+    console.info(`${prefix} ${message}`);
+  };
 
   const normalizeTitle = (title: string) => {
     if (!title) return "";
@@ -181,6 +198,9 @@ const AudioRemappingPage = ({
   const handleExcelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     setExcelFile(file);
+    setHasCompletedRun(false);
+    setProcessResults([]);
+    setLogs([]);
     if (!file) return;
 
     const reader = new FileReader();
@@ -204,17 +224,44 @@ const AudioRemappingPage = ({
     }
   };
 
+  const handleContinueWithCurrentFile = () => {
+    setHasCompletedRun(false);
+    setProcessResults([]);
+    setLogs([
+      {
+        message:
+          "🧭 현재 파일/시트/범위를 유지한 상태로 재작업을 준비했습니다.",
+        type: "info",
+      },
+    ]);
+  };
+
+  const handleResetForReupload = () => {
+    setExcelFile(null);
+    setSheetNames([]);
+    setSelectedSheet("");
+    setSheetData([]);
+    setRawRows([]);
+    setExcelStartRow(undefined);
+    setExcelEndRow(undefined);
+    setIsAllRows(false);
+    setLogs([]);
+    setProcessResults([]);
+    setHasCompletedRun(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const handleRemapAll = useCallback(async () => {
     if (isProcessing) return;
     // sheetData는 이미 최신 범위로 반영된 상태에서 작업 시작
     setIsProcessing(true);
+    setHasCompletedRun(false);
     setProcessResults([]); // 이전 결과 초기화
-    setLogs([
-      {
-        message: "🚀 자동 리매핑 및 경로 최적화 작업을 시작합니다.",
-        type: "info",
-      },
-    ]);
+    const startMessage = "🚀 자동 리매핑 및 경로 최적화 작업을 시작합니다.";
+    setLogs([{ message: startMessage, type: "info" }]);
+    console.info(`[AudioRemap][INFO] ${startMessage}`);
     // 작업 시작 시 excelFile, rawRows, sheetData 등은 초기화하지 않음 (상태 유지)
 
     const language = sheetData[0]?.language || DEFAUKLT_LANGUAGE;
@@ -251,13 +298,10 @@ const AudioRemappingPage = ({
           }
           if (!prog) {
             // 실패도 결과 요약에 추가
-            setLogs((prev) => [
-              ...prev,
-              {
-                message: `❌ ${channelName} 프로그램 에러: 프로그램 찾기 실패`,
-                type: "error",
-              },
-            ]);
+            appendLog(
+              `❌ [채널:${channelName}] 프로그램 에러: 프로그램 찾기 실패`,
+              "error",
+            );
             currentResults.push({
               program: channelName,
               episode: "-",
@@ -287,130 +331,131 @@ const AudioRemappingPage = ({
           totalEpisodesCount += episodes.length;
 
           let episodeProcessed = 0;
-          await Promise.all(
-            episodes.map(async (episode, j) => {
-              const epTitle = episode.title || "Unknown Title";
-              const episodeIdx = j + 1;
-              const episodeTotal = episodes.length;
-              try {
-                const epNorm = normalizeTitle(epTitle);
-                const epDate = formatDate(episode.date);
-                const matchedRss = rssItems.find((item) => {
-                  const rssNorm = normalizeTitle(item.title);
-                  const rssDate = formatDate(item.date || item.pubDate);
-                  return rssNorm === epNorm || (epDate && epDate === rssDate);
-                });
+          const processEpisode = async (episode: any, episodeIdx: number) => {
+            const epTitle = episode.title || "Unknown Title";
+            const episodeTotal = episodes.length;
+            try {
+              const epNorm = normalizeTitle(epTitle);
+              const epDate = formatDate(episode.date);
+              const matchedRss = rssItems.find((item) => {
+                const rssNorm = normalizeTitle(item.title);
+                const rssDate = formatDate(item.date || item.pubDate);
+                return rssNorm === epNorm || (epDate && epDate === rssDate);
+              });
 
-                if (!matchedRss) {
-                  throw new Error("RSS 매칭 실패");
-                }
-
-                // 폴더 경로 최적화
-                let r2Folder = buildEpisodeFolder(String(language));
-                if (episode.audio_file?.startsWith("http")) {
-                  try {
-                    const urlPath = new URL(episode.audio_file).pathname;
-                    let pathParts = urlPath.split("/").filter((p) => p);
-                    pathParts.pop();
-                    const lastPart = decodeURIComponent(
-                      pathParts[pathParts.length - 1],
-                    );
-                    if (lastPart === channelName) pathParts.pop();
-                    r2Folder = pathParts.join("/");
-                  } catch (e) {}
-                }
-
-                const epSafeTitle = epTitle.replace(/[/\\?%*:|"<>]/g, "-");
-                const m4aFilename = `${epSafeTitle}.m4a`;
-                const mp3Filename = `${epSafeTitle}.mp3`;
-
-                const convResult = await convertAll([
-                  { ...matchedRss, filename: mp3Filename } as any,
-                ]);
-                const rawResult = convResult[mp3Filename];
-                const base64 =
-                  typeof rawResult === "object" && rawResult !== null
-                    ? (rawResult as any).file
-                    : rawResult;
-
-                if (!base64) throw new Error("오디오 변환 실패");
-
-                const uploadResult = await uploadAll(
-                  [{ ...matchedRss, filename: m4aFilename } as any],
-                  {
-                    [mp3Filename]: {
-                      status: "done",
-                      file: base64,
-                      progress: 100,
-                    },
-                  },
-                  r2Folder,
-                  channelName,
-                );
-
-                const r2Url = uploadResult.urlMap[m4aFilename];
-                if (!r2Url) throw new Error("업로드 실패");
-
-                const finalUrl = r2Url.replace(/#/g, "%23");
-                const { error: updateErr } = await supabase
-                  .from("episodes")
-                  .update({ audio_file: finalUrl })
-                  .eq("id", episode.id);
-
-                if (updateErr) throw updateErr;
-
-                processedEpisodesCount++;
-                episodeProcessed++;
-                setLogs((prev) => [
-                  ...prev,
-                  {
-                    message: `[${programIdx}-${episodeIdx}][P ${programIdx}/${programTotal}][E ${episodeProcessed}/${episodeTotal}] ✅ [${epTitle}] 완료`,
-                    type: "success",
-                  },
-                ]);
-                currentResults.push({
-                  program: channelName,
-                  episode: epTitle,
-                  status: "success",
-                });
-              } catch (err: any) {
-                processedEpisodesCount++;
-                episodeProcessed++;
-                setLogs((prev) => [
-                  ...prev,
-                  {
-                    message: `[${programIdx}-${episodeIdx}][P ${programIdx}/${programTotal}][E ${episodeProcessed}/${episodeTotal}] ❌ [${epTitle}] 실패: ${err.message}`,
-                    type: "error",
-                  },
-                ]);
-                currentResults.push({
-                  program: channelName,
-                  episode: epTitle,
-                  status: "failed",
-                  reason: err.message,
-                });
+              if (!matchedRss) {
+                throw new Error("RSS 매칭 실패");
               }
-            }),
-          );
+
+              let r2Folder = buildEpisodeFolder(String(language));
+              if (episode.audio_file?.startsWith("http")) {
+                try {
+                  const urlPath = new URL(episode.audio_file).pathname;
+                  let pathParts = urlPath.split("/").filter((p) => p);
+                  pathParts.pop();
+                  const lastPart = decodeURIComponent(
+                    pathParts[pathParts.length - 1],
+                  );
+                  if (lastPart === channelName) pathParts.pop();
+                  r2Folder = pathParts.join("/");
+                } catch (e) {}
+              }
+
+              const epSafeTitle = epTitle.replace(/[/\\?%*:|"<>]/g, "-");
+              const m4aFilename = `${epSafeTitle}.m4a`;
+              const mp3Filename = `${epSafeTitle}.mp3`;
+
+              const convResult = await convertAll([
+                { ...matchedRss, filename: mp3Filename } as any,
+              ]);
+              const rawResult = convResult[mp3Filename];
+              const base64 =
+                typeof rawResult === "object" && rawResult !== null
+                  ? (rawResult as any).file
+                  : rawResult;
+
+              if (!base64) throw new Error("오디오 변환 실패");
+
+              const uploadResult = await uploadAll(
+                [{ ...matchedRss, filename: m4aFilename } as any],
+                {
+                  [mp3Filename]: {
+                    status: "done",
+                    file: base64,
+                    progress: 100,
+                  },
+                },
+                r2Folder,
+                channelName,
+              );
+
+              const r2Url = uploadResult.urlMap[m4aFilename];
+              if (!r2Url) throw new Error("업로드 실패");
+
+              const finalUrl = r2Url.replace(/#/g, "%23");
+              const { error: updateErr } = await supabase
+                .from("episodes")
+                .update({ audio_file: finalUrl })
+                .eq("id", episode.id);
+
+              if (updateErr) throw updateErr;
+
+              processedEpisodesCount++;
+              episodeProcessed++;
+              appendLog(
+                `[채널:${channelName}][${programIdx}-${episodeIdx}][P ${programIdx}/${programTotal}][E ${episodeProcessed}/${episodeTotal}] ✅ [${epTitle}] 완료`,
+                "success",
+              );
+              currentResults.push({
+                program: channelName,
+                episode: epTitle,
+                status: "success",
+              });
+            } catch (err: any) {
+              processedEpisodesCount++;
+              episodeProcessed++;
+              appendLog(
+                `[채널:${channelName}][${programIdx}-${episodeIdx}][P ${programIdx}/${programTotal}][E ${episodeProcessed}/${episodeTotal}] ❌ [${epTitle}] 실패: ${err.message}`,
+                "error",
+              );
+              currentResults.push({
+                program: channelName,
+                episode: epTitle,
+                status: "failed",
+                reason: err.message,
+              });
+            }
+          };
+
+          for (
+            let startIdx = 0;
+            startIdx < episodes.length;
+            startIdx += MAX_EPISODE_CONCURRENCY
+          ) {
+            const batch = episodes.slice(
+              startIdx,
+              startIdx + MAX_EPISODE_CONCURRENCY,
+            );
+            await Promise.all(
+              batch.map((episode, offset) =>
+                processEpisode(episode, startIdx + offset + 1),
+              ),
+            );
+          }
         } catch (err: any) {
-          setLogs((prev) => [
-            ...prev,
-            {
-              message: `❌ ${channelName} 프로그램 에러: ${err.message}`,
-              type: "error",
-            },
-          ]);
+          appendLog(
+            `❌ [채널:${channelName}] 프로그램 에러: ${err.message}`,
+            "error",
+          );
         }
       }
     } finally {
       setIsProcessing(false);
-      setLogs((prev) => [
-        ...prev,
-        {
-          message: `🎉 작업 종료 (성공: ${processedEpisodesCount}/${totalEpisodesCount})`,
-          type: "success",
-        },
-      ]);
+      setHasCompletedRun(true);
+      appendLog(
+        `🎉 작업 종료 (성공: ${processedEpisodesCount}/${totalEpisodesCount})`,
+        "success",
+      );
       setProcessResults(currentResults);
       // 작업 종료 후에도 excelFile, rawRows, sheetData 등은 초기화하지 않음 (상태 유지)
     }
@@ -418,7 +463,16 @@ const AudioRemappingPage = ({
 
   useEffect(() => {
     if (excelFile && selectedSheet) {
-      parseSheetData(excelFile, selectedSheet, excelStartRow ?? 4, excelEndRow);
+      const startRow = excelStartRow ?? 4;
+      if (excelEndRow !== undefined && excelEndRow < startRow) {
+        setSheetData([]);
+        return;
+      }
+      const debounceId = window.setTimeout(() => {
+        parseSheetData(excelFile, selectedSheet, startRow, excelEndRow);
+      }, 200);
+
+      return () => window.clearTimeout(debounceId);
     }
   }, [excelFile, selectedSheet, excelStartRow, excelEndRow, parseSheetData]);
 
@@ -454,6 +508,7 @@ const AudioRemappingPage = ({
               </label>
               <input
                 id="excel-upload"
+                ref={fileInputRef}
                 type="file"
                 accept=".xlsx,.xls"
                 onChange={handleExcelChange}
@@ -754,6 +809,27 @@ const AudioRemappingPage = ({
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* 작업 후 선택 */}
+          {hasCompletedRun && !isProcessing && (
+            <div className={fieldClass}>
+              <span className={fieldLabelClass}>작업 후 선택</span>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={handleContinueWithCurrentFile}
+                  className={ghostButtonClass + " px-5 py-2"}
+                >
+                  현재 파일로 이어서 작업
+                </button>
+                <button
+                  onClick={handleResetForReupload}
+                  className={ghostButtonClass + " px-5 py-2"}
+                >
+                  파일 다시 업로드
+                </button>
               </div>
             </div>
           )}
