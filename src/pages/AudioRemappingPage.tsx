@@ -99,7 +99,7 @@ const AudioRemappingPage = ({
     "채널명",
     "RSS",
   ];
-  const MAX_EPISODE_CONCURRENCY = 5;
+  const MAX_EPISODE_CONCURRENCY = import.meta.env.PROD ? 1 : 5;
 
   const appendLog = (message: string, type: LogEntry["type"] = "info") => {
     setLogs((prev) => [...prev, { message, type }]);
