@@ -5,6 +5,8 @@ import type { ProcessTone } from "./useProcessLog";
 type ConvertLogContext = {
   channelName?: string;
   episodeTitle?: string;
+  programId?: number;
+  episodeId?: number;
   programIndex?: number;
   programTotal?: number;
   episodeIndex?: number;

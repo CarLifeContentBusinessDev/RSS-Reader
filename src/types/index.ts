@@ -19,8 +19,10 @@ export type ProgramRow = {
 
 export type ParsedItem = {
   title: string;
+  itunesTitle?: string;
   audioUrl: string;
   date: string;
+  pubDate?: string;
   duration: string;
   filename: string;
   r2Url: string;
@@ -33,6 +35,7 @@ export type ParsedProgram = {
   title: string;
   subtitle: string;
   imgUrl: string;
+  itunesTitle?: string;
 };
 
 export type LogTone = "info" | "success" | "error" | "action";

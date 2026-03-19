@@ -5,6 +5,45 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import ffmpeg from "fluent-ffmpeg";
 
+const ANSI = {
+  reset: "\x1b[0m",
+  red: "\x1b[31m",
+};
+
+const colorizeError = (message: string) => `${ANSI.red}${message}${ANSI.reset}`;
+
+const buildLogPrefix = (logContext?: {
+  channelName?: string;
+  episodeTitle?: string;
+  programId?: number;
+  episodeId?: number;
+  programIndex?: number;
+  programTotal?: number;
+  episodeIndex?: number;
+  episodeTotal?: number;
+}) => {
+  const p =
+    logContext?.programIndex && logContext?.programTotal
+      ? `[P ${String(logContext.programIndex)}/${String(logContext.programTotal)}]`
+      : "[P --/--]";
+  const e =
+    logContext?.episodeIndex && logContext?.episodeTotal
+      ? `[E ${String(logContext.episodeIndex)}/${String(logContext.episodeTotal)}]`
+      : "[E --/--]";
+  const channel = logContext?.programId
+    ? `[채널(${logContext.programId}): ${logContext.channelName || ""}]`
+    : logContext?.channelName
+      ? `[채널: ${logContext.channelName}]`
+      : "[채널: ]";
+  const episode = logContext?.episodeId
+    ? `[에피(${logContext.episodeId}): ${logContext.episodeTitle || ""}]`
+    : logContext?.episodeTitle
+      ? `[에피: ${logContext.episodeTitle}]`
+      : "[에피: ]";
+
+  return `[convertAudio]${p}${e} ${channel} ${episode}`;
+};
+
 // Vercel 환경에서 ffmpeg 바이너리 경로 설정
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -23,6 +62,9 @@ export default async function handler(
   res: ServerResponse,
 ) {
   if (req.method !== "POST") {
+    console.error(
+      colorizeError("[convertAudio] 변환 실패: Method not allowed"),
+    );
     res.statusCode = 405;
     res.end(JSON.stringify({ error: "Method not allowed" }));
     return;
@@ -40,6 +82,8 @@ export default async function handler(
     logContext?: {
       channelName?: string;
       episodeTitle?: string;
+      programId?: number;
+      episodeId?: number;
       programIndex?: number;
       programTotal?: number;
       episodeIndex?: number;
@@ -49,6 +93,7 @@ export default async function handler(
   try {
     parsed = JSON.parse(body);
   } catch {
+    console.error(colorizeError("[convertAudio] 변환 실패: Invalid JSON"));
     res.statusCode = 400;
     res.end(JSON.stringify({ error: "Invalid JSON" }));
     return;
@@ -56,31 +101,21 @@ export default async function handler(
 
   const { url, filename, logContext } = parsed;
   if (!url || !filename) {
+    console.error(
+      colorizeError("[convertAudio] 변환 실패: url, filename 누락"),
+    );
     res.statusCode = 400;
     res.end(JSON.stringify({ error: "url, filename 누락" }));
     return;
   }
 
-  const contextPrefix = [
-    "[convertAudio]",
-    logContext?.channelName ? `[채널:${logContext.channelName}]` : "",
-    logContext?.programIndex && logContext?.programTotal
-      ? `[P ${logContext.programIndex}/${logContext.programTotal}]`
-      : "",
-    logContext?.episodeIndex && logContext?.episodeTotal
-      ? `[E ${logContext.episodeIndex}/${logContext.episodeTotal}]`
-      : "",
-    logContext?.episodeTitle ? `[에피:${logContext.episodeTitle}]` : "",
-  ]
-    .filter(Boolean)
-    .join("");
+  const contextPrefix = buildLogPrefix(logContext);
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "audio-"));
   const mp3Path = path.join(tmpDir, "input.mp3");
   const m4aPath = path.join(tmpDir, "output.m4a");
 
   try {
-    console.log(`${contextPrefix} 다운로드 시작: ${url}`);
     const downloadStart = Date.now();
 
     // mp3 다운로드
@@ -93,17 +128,14 @@ export default async function handler(
     }
     const arrayBuffer = await upstream.arrayBuffer();
     const downloadTime = Date.now() - downloadStart;
-    console.log(
-      `${contextPrefix} 다운로드 완료: ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)}MB (${downloadTime}ms)`,
-    );
 
     const sizeMB = arrayBuffer.byteLength / 1024 / 1024;
-    console.log(`${contextPrefix} 입력 파일 크기: ${sizeMB.toFixed(1)}MB`);
+    void sizeMB;
+    void downloadTime;
 
     fs.writeFileSync(mp3Path, Buffer.from(arrayBuffer));
 
     // ffmpeg 변환: AAC 저용량 프로필 (대용량 파일 대응)
-    console.log(`${contextPrefix} 변환 시작...`);
     const convertStart = Date.now();
 
     await new Promise<void>((resolve, reject) => {
@@ -123,12 +155,9 @@ export default async function handler(
         .run();
     });
     const convertTime = Date.now() - convertStart;
-    console.log(`${contextPrefix} 변환 완료 (${convertTime}ms)`);
+    void convertTime;
 
     const m4aBuffer = fs.readFileSync(m4aPath);
-    console.log(
-      `${contextPrefix} 최종 크기: ${(m4aBuffer.length / 1024).toFixed(1)}KB`,
-    );
     const base64 = m4aBuffer.toString("base64");
 
     res.statusCode = 200;
@@ -144,7 +173,7 @@ export default async function handler(
         : message.toLowerCase().includes("timeout")
           ? 504
           : 500;
-    console.error(`${contextPrefix} error:`, message);
+    console.error(colorizeError(`${contextPrefix} 변환 실패: ${message}`));
     res.statusCode = statusCode;
     res.setHeader("Content-Type", "application/json");
     res.end(

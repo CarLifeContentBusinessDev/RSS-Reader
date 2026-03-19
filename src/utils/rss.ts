@@ -4,6 +4,19 @@ import { formatDateYYMMDD, formatDuration } from "./format";
 import { buildItemsWithChannel } from "./r2";
 import { buildSqlText } from "./sql";
 
+const getFirstByLocalName = (root: ParentNode, localName: string) => {
+  const nodes = Array.from(root.querySelectorAll("*"));
+  const lowered = localName.toLowerCase();
+  const prefixed = nodes.find((node) => {
+    const name = node.nodeName?.toLowerCase() || "";
+    return name.endsWith(`:${lowered}`);
+  });
+  if (prefixed) return prefixed;
+  return (
+    nodes.find((node) => node.localName?.toLowerCase() === lowered) ?? null
+  );
+};
+
 export const parseRss = (
   xmlText: string,
   limit: number,
@@ -29,8 +42,12 @@ export const parseRss = (
   );
 
   const baseItems: ParsedItem[] = itemNodes.map((item) => {
-    const title =
-      item.querySelector("title")?.textContent?.trim() || "제목 없음";
+    const itunesTitleNode =
+      item.getElementsByTagNameNS(ITUNES_NS, "title")[0] ??
+      getFirstByLocalName(item, "title");
+    const itunesTitle = itunesTitleNode?.textContent?.trim() || "";
+    const titleFromTag = item.querySelector("title")?.textContent?.trim() || "";
+    const title = titleFromTag || itunesTitle || "제목 없음";
     const enclosure = item.querySelector("enclosure");
     const audioUrl = enclosure?.getAttribute("url") || "";
     const pubDateRaw = item.querySelector("pubDate")?.textContent || "";
@@ -40,14 +57,18 @@ export const parseRss = (
       : parsedDate;
     const date = formatDateYYMMDD(safeDate);
 
-    const durationNode = item.getElementsByTagNameNS(ITUNES_NS, "duration")[0];
+    const durationNode =
+      item.getElementsByTagNameNS(ITUNES_NS, "duration")[0] ??
+      getFirstByLocalName(item, "duration");
     const durationRaw = durationNode?.textContent || "0";
     const duration = formatDuration(durationRaw);
 
     return {
       title,
+      itunesTitle,
       audioUrl,
       date,
+      pubDate: pubDateRaw,
       duration,
       filename: "",
       r2Url: "",
@@ -71,6 +92,8 @@ export const parseProgramRss = (xmlText: string): ParsedProgram => {
 
   const title =
     doc.querySelector("channel > title")?.textContent?.trim() || "제목 없음";
+  const itunesTitleNode = doc.getElementsByTagNameNS(ITUNES_NS, "title")[0];
+  const itunesTitle = itunesTitleNode?.textContent?.trim() || "";
   const subtitleNode = doc.getElementsByTagNameNS(ITUNES_NS, "subtitle")[0];
   const subtitle =
     subtitleNode?.textContent?.trim() ||
@@ -83,7 +106,7 @@ export const parseProgramRss = (xmlText: string): ParsedProgram => {
     doc.querySelector("channel > image > url")?.textContent?.trim() ||
     "";
 
-  return { title, subtitle, imgUrl };
+  return { title, subtitle, imgUrl, itunesTitle };
 };
 
 export const buildChannelR2Url = (

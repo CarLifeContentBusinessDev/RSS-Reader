@@ -8,6 +8,7 @@ import {
   buildEpisodeFolder,
   DEFAUKLT_LANGUAGE,
 } from "../constants/options";
+import { LANGUAGE_OPTIONS } from "../constants/language";
 import {
   fieldClass,
   fieldLabelClass,
@@ -34,7 +35,9 @@ interface LogEntry {
 
 interface ProcessResult {
   program: string;
+  programId?: number;
   episode: string;
+  episodeId?: number;
   status: "success" | "failed";
   reason?: string;
 }
@@ -64,6 +67,8 @@ const AudioRemappingPage = ({
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>("");
+  const [selectedLanguage, setSelectedLanguage] =
+    useState<string>(DEFAUKLT_LANGUAGE);
   const [sheetData, setSheetData] = useState<ExcelRow[]>([]);
   const [rawRows, setRawRows] = useState<string[][]>([]);
   const [excelStartRow, setExcelStartRow] = useState<number | undefined>(
@@ -126,6 +131,67 @@ const AudioRemappingPage = ({
       .trim();
   };
 
+  const formatContextPrefix = (context: {
+    programIndex?: number;
+    programTotal?: number;
+    episodeIndex?: number;
+    episodeTotal?: number;
+    channelName?: string;
+    programId?: number;
+    episodeTitle?: string;
+    episodeId?: number;
+  }) => {
+    const toText = (value?: number) =>
+      typeof value === "number" ? String(value) : "--";
+
+    const p = `[P ${toText(context.programIndex)}/${toText(context.programTotal)}]`;
+    const e = `[E ${toText(context.episodeIndex)}/${toText(context.episodeTotal)}]`;
+    const channel =
+      typeof context.programId === "number"
+        ? `[채널(${context.programId}): ${context.channelName || ""}]`
+        : `[채널: ${context.channelName || ""}]`;
+    const episode =
+      typeof context.episodeId === "number"
+        ? `[에피(${context.episodeId}): ${context.episodeTitle || ""}]`
+        : `[에피: ${context.episodeTitle || ""}]`;
+
+    return `${p}${e} ${channel} ${episode}`;
+  };
+
+  const resolveR2Folder = (
+    targetLanguage: string,
+    channelName: string,
+    previousAudioFile?: string,
+  ) => {
+    const normalizedLanguage = String(targetLanguage || "").toLowerCase();
+
+    // 북미(en) 작업은 기존 경로를 참조하지 않고 고정 경로를 사용
+    if (normalizedLanguage === "en") {
+      return "/en-episodes-audio/m4a";
+    }
+
+    let folder = buildEpisodeFolder(String(targetLanguage));
+    if (!previousAudioFile?.startsWith("http")) return folder;
+
+    try {
+      const urlPath = new URL(previousAudioFile).pathname;
+      const pathParts = urlPath.split("/").filter((p) => p);
+      if (pathParts.length === 0) return folder;
+
+      // 마지막은 파일명
+      pathParts.pop();
+      const lastPart = decodeURIComponent(
+        pathParts[pathParts.length - 1] || "",
+      );
+      if (lastPart === channelName) {
+        pathParts.pop();
+      }
+      return pathParts.join("/");
+    } catch {
+      return folder;
+    }
+  };
+
   const formatDate = (dateInput: string | Date | undefined) => {
     if (!dateInput) return "";
     try {
@@ -135,6 +201,70 @@ const AudioRemappingPage = ({
     } catch {
       return "";
     }
+  };
+
+  const getRowLanguage = (row: ExcelRow, fallback = DEFAUKLT_LANGUAGE) => {
+    const raw =
+      row["language"] ??
+      row["Language"] ??
+      row["LANGUAGE"] ??
+      row["lang"] ??
+      row["Lang"] ??
+      row["언어"] ??
+      fallback;
+
+    const normalized = String(raw || "")
+      .trim()
+      .toLowerCase();
+    return normalized || String(fallback).trim().toLowerCase();
+  };
+
+  const detectLanguageFromSheetName = (
+    sheetName: string,
+    fallback = DEFAUKLT_LANGUAGE,
+  ) => {
+    const normalized = String(sheetName || "")
+      .trim()
+      .toLowerCase();
+    if (!normalized) return fallback;
+
+    const prefix = normalized.split(/[_\-\s]+/)[0];
+    const codeMap: Record<string, string> = {
+      ko: "ko",
+      kr: "ko",
+      en: "en",
+      us: "en",
+      de: "de",
+      jp: "jp",
+      ja: "jp",
+      in: "in",
+      uk: "uk",
+      fr: "fr",
+      es: "es",
+      it: "it",
+    };
+    if (codeMap[prefix]) return codeMap[prefix];
+
+    if (normalized.includes("미국") || normalized.includes("english"))
+      return "en";
+    if (normalized.includes("한국") || normalized.includes("korea"))
+      return "ko";
+    if (normalized.includes("독일") || normalized.includes("german"))
+      return "de";
+    if (normalized.includes("일본") || normalized.includes("japan"))
+      return "jp";
+    if (normalized.includes("인도") || normalized.includes("india"))
+      return "in";
+    if (normalized.includes("영국") || normalized.includes("britain"))
+      return "uk";
+    if (normalized.includes("프랑스") || normalized.includes("france"))
+      return "fr";
+    if (normalized.includes("스페인") || normalized.includes("spain"))
+      return "es";
+    if (normalized.includes("이탈리아") || normalized.includes("italy"))
+      return "it";
+
+    return fallback;
   };
 
   const parseSheetData = useCallback(
@@ -210,6 +340,9 @@ const AudioRemappingPage = ({
       if (workbook.SheetNames.length > 0) {
         const firstSheet = workbook.SheetNames[0];
         setSelectedSheet(firstSheet);
+        setSelectedLanguage((prev) =>
+          detectLanguageFromSheetName(firstSheet, prev),
+        );
         updateRangeAutomatically(file, firstSheet);
       }
     };
@@ -218,6 +351,7 @@ const AudioRemappingPage = ({
 
   const handleSheetChange = (sheetName: string) => {
     setSelectedSheet(sheetName);
+    setSelectedLanguage((prev) => detectLanguageFromSheetName(sheetName, prev));
     setIsAllRows(false); // 시트 변경 시 항상 해제
     if (excelFile) {
       updateRangeAutomatically(excelFile, sheetName);
@@ -264,12 +398,13 @@ const AudioRemappingPage = ({
     console.info(`[AudioRemap][INFO] ${startMessage}`);
     // 작업 시작 시 excelFile, rawRows, sheetData 등은 초기화하지 않음 (상태 유지)
 
-    const language = sheetData[0]?.language || DEFAUKLT_LANGUAGE;
+    const defaultLanguage = selectedLanguage;
     const currentResults: ProcessResult[] = [];
 
     try {
       for (let i = 0; i < sheetData.length; i++) {
         const row = sheetData[i];
+        const rowLanguage = getRowLanguage(row, defaultLanguage);
         const channelName = String(row["채널명"] || "").trim();
         const rssUrl = String(row["RSS"] || "").trim();
         const programIdx = i + 1;
@@ -296,13 +431,22 @@ const AudioRemappingPage = ({
           }
           if (!prog) {
             // 실패도 결과 요약에 추가
+            const contextPrefix = formatContextPrefix({
+              programIndex: programIdx,
+              programTotal,
+              episodeIndex: 0,
+              episodeTotal: 0,
+              channelName,
+            });
             appendLog(
-              `❌ [채널:${channelName}] 프로그램 에러: 프로그램 찾기 실패`,
+              `${contextPrefix} ❌ 프로그램 에러: 프로그램 찾기 실패`,
               "error",
             );
             currentResults.push({
               program: channelName,
+              programId: undefined,
               episode: "-",
+              episodeId: undefined,
               status: "failed",
               reason: "프로그램 찾기 실패",
             });
@@ -323,39 +467,52 @@ const AudioRemappingPage = ({
             rssText,
             1000,
             prog.id,
-            "ko",
+            rowLanguage,
           ) as { items: ParsedItem[] };
 
           let episodeProcessed = 0;
-          const processEpisode = async (episode: any, episodeIdx: number) => {
+          const processEpisode = async (episode: any) => {
             const epTitle = episode.title || "Unknown Title";
             const episodeTotal = episodes.length;
             try {
+              const episodeProgressHint = episodeProcessed + 1;
+              const contextPrefix = formatContextPrefix({
+                programIndex: programIdx,
+                programTotal,
+                episodeIndex: episodeProgressHint,
+                episodeTotal,
+                channelName,
+                programId: prog.id,
+                episodeTitle: epTitle,
+                episodeId: episode.id,
+              });
+
               const epNorm = normalizeTitle(epTitle);
               const epDate = formatDate(episode.date);
               const matchedRss = rssItems.find((item) => {
                 const rssNorm = normalizeTitle(item.title);
+                const rssItunesNorm = normalizeTitle(item.itunesTitle || "");
                 const rssDate = formatDate(item.date || item.pubDate);
-                return rssNorm === epNorm || (epDate && epDate === rssDate);
+                return (
+                  rssNorm === epNorm ||
+                  (rssItunesNorm && rssItunesNorm === epNorm) ||
+                  (epDate && epDate === rssDate)
+                );
               });
 
               if (!matchedRss) {
                 throw new Error("RSS 매칭 실패");
               }
 
-              let r2Folder = buildEpisodeFolder(String(language));
-              if (episode.audio_file?.startsWith("http")) {
-                try {
-                  const urlPath = new URL(episode.audio_file).pathname;
-                  let pathParts = urlPath.split("/").filter((p) => p);
-                  pathParts.pop();
-                  const lastPart = decodeURIComponent(
-                    pathParts[pathParts.length - 1],
-                  );
-                  if (lastPart === channelName) pathParts.pop();
-                  r2Folder = pathParts.join("/");
-                } catch (e) {}
-              }
+              const r2Folder = resolveR2Folder(
+                rowLanguage,
+                channelName,
+                episode.audio_file,
+              );
+              appendLog(
+                `${contextPrefix} 업로드 경로 기준 언어: ${rowLanguage}, 폴더: ${r2Folder}`,
+                "info",
+              );
 
               const epSafeTitle = epTitle.replace(/[/\\?%*:|"<>]/g, "-");
               const m4aFilename = `${epSafeTitle}.m4a`;
@@ -368,9 +525,11 @@ const AudioRemappingPage = ({
                   logContext: {
                     channelName,
                     episodeTitle: epTitle,
+                    programId: prog.id,
+                    episodeId: episode.id,
                     programIndex: programIdx,
                     programTotal,
-                    episodeIndex: episodeIdx,
+                    episodeIndex: episodeProgressHint,
                     episodeTotal,
                   },
                 } as any,
@@ -384,7 +543,22 @@ const AudioRemappingPage = ({
               if (!base64) throw new Error("오디오 변환 실패");
 
               const uploadResult = await uploadAll(
-                [{ ...matchedRss, filename: m4aFilename } as any],
+                [
+                  {
+                    ...matchedRss,
+                    filename: m4aFilename,
+                    logContext: {
+                      channelName,
+                      episodeTitle: epTitle,
+                      programId: prog.id,
+                      episodeId: episode.id,
+                      programIndex: programIdx,
+                      programTotal,
+                      episodeIndex: episodeProgressHint,
+                      episodeTotal,
+                    },
+                  } as any,
+                ],
                 {
                   [mp3Filename]: {
                     status: "done",
@@ -408,26 +582,86 @@ const AudioRemappingPage = ({
               if (updateErr) throw updateErr;
 
               episodeProcessed++;
-              appendLog(
-                `[채널:${channelName}][${programIdx}-${episodeIdx}][P ${programIdx}/${programTotal}][E ${episodeProcessed}/${episodeTotal}] ✅ [${epTitle}] 완료`,
-                "success",
-              );
+              await fetch("/api/logProgress", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  stage: "supabase-apply-done",
+                  logContext: {
+                    channelName,
+                    episodeTitle: epTitle,
+                    programId: prog.id,
+                    episodeId: episode.id,
+                    programIndex: programIdx,
+                    programTotal,
+                    episodeIndex: episodeProcessed,
+                    episodeTotal,
+                  },
+                }),
+              }).catch(() => {
+                // 터미널 로그 전용 호출 실패는 메인 흐름을 막지 않음
+              });
+
+              const donePrefix = formatContextPrefix({
+                programIndex: programIdx,
+                programTotal,
+                episodeIndex: episodeProcessed,
+                episodeTotal,
+                channelName,
+                programId: prog.id,
+                episodeTitle: epTitle,
+                episodeId: episode.id,
+              });
+              appendLog(`${donePrefix} ✅ 완료`, "success");
               currentResults.push({
                 program: channelName,
+                programId: prog.id,
                 episode: epTitle,
+                episodeId: episode.id,
                 status: "success",
               });
             } catch (err: any) {
               episodeProcessed++;
-              appendLog(
-                `[채널:${channelName}][${programIdx}-${episodeIdx}][P ${programIdx}/${programTotal}][E ${episodeProcessed}/${episodeTotal}] ❌ [${epTitle}] 실패: ${err.message}`,
-                "error",
-              );
+              const failReason = err?.message || "오류 발생";
+              await fetch("/api/logProgress", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  stage: "supabase-apply-failed",
+                  reason: failReason,
+                  logContext: {
+                    channelName,
+                    episodeTitle: epTitle,
+                    programId: prog.id,
+                    episodeId: episode.id,
+                    programIndex: programIdx,
+                    programTotal,
+                    episodeIndex: episodeProcessed,
+                    episodeTotal,
+                  },
+                }),
+              }).catch(() => {
+                // 터미널 로그 전용 호출 실패는 메인 흐름을 막지 않음
+              });
+
+              const failPrefix = formatContextPrefix({
+                programIndex: programIdx,
+                programTotal,
+                episodeIndex: episodeProcessed,
+                episodeTotal,
+                channelName,
+                programId: prog.id,
+                episodeTitle: epTitle,
+                episodeId: episode.id,
+              });
+              appendLog(`${failPrefix} ❌ 실패: ${failReason}`, "error");
               currentResults.push({
                 program: channelName,
+                programId: prog.id,
                 episode: epTitle,
+                episodeId: episode.id,
                 status: "failed",
-                reason: err.message,
+                reason: failReason,
               });
             }
           };
@@ -441,15 +675,18 @@ const AudioRemappingPage = ({
               startIdx,
               startIdx + MAX_EPISODE_CONCURRENCY,
             );
-            await Promise.all(
-              batch.map((episode, offset) =>
-                processEpisode(episode, startIdx + offset + 1),
-              ),
-            );
+            await Promise.all(batch.map((episode) => processEpisode(episode)));
           }
         } catch (err: any) {
+          const contextPrefix = formatContextPrefix({
+            programIndex: programIdx,
+            programTotal,
+            episodeIndex: 0,
+            episodeTotal: 0,
+            channelName,
+          });
           appendLog(
-            `❌ [채널:${channelName}] 프로그램 에러: ${err.message}`,
+            `${contextPrefix} ❌ 프로그램 에러: ${err.message}`,
             "error",
           );
         }
@@ -473,7 +710,7 @@ const AudioRemappingPage = ({
       setProcessResults(currentResults);
       // 작업 종료 후에도 excelFile, rawRows, sheetData 등은 초기화하지 않음 (상태 유지)
     }
-  }, [sheetData, convertAll, uploadAll, isProcessing]);
+  }, [sheetData, selectedLanguage, convertAll, uploadAll, isProcessing]);
 
   useEffect(() => {
     if (excelFile && selectedSheet) {
@@ -567,6 +804,21 @@ const AudioRemappingPage = ({
                   </option>
                 ))}
               </select>
+
+              <div className="mt-3">
+                <span className={fieldLabelClass}>Language</span>
+                <select
+                  value={selectedLanguage}
+                  onChange={(e) => setSelectedLanguage(e.target.value)}
+                  className={inputClass}
+                >
+                  {LANGUAGE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
 
@@ -747,7 +999,7 @@ const AudioRemappingPage = ({
                           background: "#f8fafc",
                         }}
                       >
-                        채널명
+                        채널명(ID)
                       </th>
                       <th
                         className="px-4 py-2 font-bold text-slate-700 bg-slate-100 border-b border-slate-200 text-left"
@@ -757,7 +1009,7 @@ const AudioRemappingPage = ({
                           background: "#f8fafc",
                         }}
                       >
-                        에피소드명
+                        에피소드명(ID)
                       </th>
                       <th
                         className="px-4 py-2 font-bold text-slate-700 bg-slate-100 border-b border-slate-200 text-center"
@@ -794,6 +1046,9 @@ const AudioRemappingPage = ({
                       >
                         <td className="px-4 py-2 text-slate-800 border-r border-slate-100 font-medium">
                           {res.program}
+                          {typeof res.programId === "number"
+                            ? ` (${res.programId})`
+                            : ""}
                         </td>
                         <td
                           className="px-4 py-2 text-slate-800 border-r border-slate-100"
@@ -806,6 +1061,9 @@ const AudioRemappingPage = ({
                           title={res.episode}
                         >
                           {res.episode}
+                          {typeof res.episodeId === "number"
+                            ? ` (${res.episodeId})`
+                            : ""}
                         </td>
                         <td className="px-4 py-2 border-r border-slate-100 text-center">
                           <span

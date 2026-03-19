@@ -11,6 +11,17 @@ export interface UploadState {
   error?: string;
 }
 
+type UploadLogContext = {
+  channelName?: string;
+  episodeTitle?: string;
+  programId?: number;
+  episodeId?: number;
+  programIndex?: number;
+  programTotal?: number;
+  episodeIndex?: number;
+  episodeTotal?: number;
+};
+
 interface UseAudioUploadOptions {
   addLog: (message: string, tone?: LogTone) => void;
   setProcess: (label: string, tone: ProcessTone) => void;
@@ -75,6 +86,9 @@ export function useAudioUpload({ addLog, setProcess }: UseAudioUploadOptions) {
       const folder = `${r2Folder.replace(/^\/+/, "")}/${channelTitle}`;
 
       try {
+        const logContext = (
+          item as ParsedItem & { logContext?: UploadLogContext }
+        ).logContext;
         const res = await fetch("/api/uploadAudio", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -82,6 +96,7 @@ export function useAudioUpload({ addLog, setProcess }: UseAudioUploadOptions) {
             folder,
             filename: m4aFilename,
             file: convertState.file,
+            logContext,
           }),
         });
 
