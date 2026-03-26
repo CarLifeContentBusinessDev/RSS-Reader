@@ -52,7 +52,7 @@ export function useAudioConvert({
    * 변환 실행. 완료 시 { filename → base64 } 맵 반환.
    * EpisodesPage에서 이 결과로 즉시 audioUrl + filename 교체 가능.
    */
-  const CONCURRENCY = 5;
+  const CONCURRENCY = 1;
 
   const convertAll = async (
     items: ParsedItem[],
@@ -107,6 +107,11 @@ export function useAudioConvert({
             if (res.status === 504) {
               throw new Error(
                 "변환 시간 초과 (10초 제한). 파일이 너무 큽니다.",
+              );
+            }
+            if (res.status === 413) {
+              throw new Error(
+                "변환 결과가 너무 커 처리할 수 없습니다. 무손실/무압축 대신 재압축 모드를 사용하세요.",
               );
             }
             const err = await res.json().catch(() => ({

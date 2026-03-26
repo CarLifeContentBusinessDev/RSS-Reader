@@ -79,7 +79,7 @@ const rssProxy = (env: Record<string, string>): Plugin => ({
     // ── uploadAudio (NEW) ─────────────────────────────────────
     server.middlewares.use(
       "/api/uploadAudio",
-      async (req: IncomingMessageWithBody, res: ServerResponse) => {
+      async (req: IncomingMessage, res: ServerResponse) => {
         process.env.CLOUDFLARE_R2_ENDPOINT = env.CLOUDFLARE_R2_ENDPOINT;
         process.env.CLOUDFLARE_R2_BUCKET = env.CLOUDFLARE_R2_BUCKET;
         process.env.CLOUDFLARE_R2_ACCESS_KEY_ID =
@@ -90,29 +90,49 @@ const rssProxy = (env: Record<string, string>): Plugin => ({
           env.CLOUDFLARE_R2_PUBLIC_BASE_URL;
 
         const { default: handler } = await import("./api/uploadAudio.ts");
-        let body = "";
-        req.on("data", (chunk) => {
-          body += chunk;
-        });
-        req.on("end", async () => {
-          try {
-            req.body = JSON.parse(body);
-          } catch {
-            req.body = {};
-          }
-          try {
-            await handler(req, res);
-          } catch (e) {
-            res.statusCode = 500;
-            res.setHeader("Content-Type", "application/json");
-            res.end(
-              JSON.stringify({
-                error: "uploadAudio handler error",
-                details: e instanceof Error ? e.message : String(e),
-              }),
-            );
-          }
-        });
+        try {
+          await handler(req, res);
+        } catch (e) {
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              error: "uploadAudio handler error",
+              details: e instanceof Error ? e.message : String(e),
+            }),
+          );
+        }
+      },
+    );
+
+    // ── convertAndUploadAudio ─────────────────────────────────
+    server.middlewares.use(
+      "/api/convertAndUploadAudio",
+      async (req: IncomingMessage, res: ServerResponse) => {
+        process.env.CLOUDFLARE_R2_ENDPOINT = env.CLOUDFLARE_R2_ENDPOINT;
+        process.env.CLOUDFLARE_R2_BUCKET = env.CLOUDFLARE_R2_BUCKET;
+        process.env.CLOUDFLARE_R2_ACCESS_KEY_ID =
+          env.CLOUDFLARE_R2_ACCESS_KEY_ID;
+        process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY =
+          env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
+        process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL =
+          env.CLOUDFLARE_R2_PUBLIC_BASE_URL;
+
+        const { default: handler } = await import(
+          "./api/convertAndUploadAudio.ts"
+        );
+        try {
+          await handler(req, res);
+        } catch (e) {
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              error: "convertAndUploadAudio handler error",
+              details: e instanceof Error ? e.message : String(e),
+            }),
+          );
+        }
       },
     );
 

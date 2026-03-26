@@ -4,17 +4,21 @@ import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import ffmpeg from "fluent-ffmpeg";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 // m4a(ipod) 컨테이너는 mp3 오디오 스트림 copy를 지원하지 않는다.
 const M4A_REMUX_CODECS = new Set(["aac", "alac"]);
-const MAX_BASE64_SAFE_BYTES = 380 * 1024 * 1024; // JS 문자열 한도 여유를 남긴 base64 안전 상한
 
 const ANSI = {
   reset: "\x1b[0m",
   red: "\x1b[31m",
+  green: "\x1b[32m",
 };
 
-const colorizeError = (message: string) => `${ANSI.red}${message}${ANSI.reset}`;
+const colorizeError = (message: string) =>
+  `${ANSI.red}${message}${ANSI.reset}`;
+const colorizeSuccess = (message: string) =>
+  `${ANSI.green}${message}${ANSI.reset}`;
 
 const buildLogPrefix = (logContext?: {
   channelName?: string;
@@ -45,10 +49,9 @@ const buildLogPrefix = (logContext?: {
       ? `[에피: ${logContext.episodeTitle}]`
       : "[에피: ]";
 
-  return `[convertAudio]${p}${e} ${channel} ${episode}`;
+  return `[convertAndUploadAudio]${p}${e} ${channel} ${episode}`;
 };
 
-// Vercel 환경에서 ffmpeg 바이너리 경로 설정
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 const getSourceAudioCodec = async (filePath: string) => {
@@ -82,13 +85,10 @@ const runM4aConvert = async (
     const command = ffmpeg(inputPath).noVideo().output(outputPath);
 
     if (mode === "copy") {
-      command.outputOptions([
-        "-c:a copy",
-        "-movflags +faststart", // 스트리밍/빠른 재생 최적화
-      ]);
+      command.outputOptions(["-c:a copy", "-movflags +faststart"]);
     } else {
       command.audioCodec("aac").audioBitrate("320k").outputOptions([
-        "-movflags +faststart", // 스트리밍/빠른 재생 최적화
+        "-movflags +faststart",
         "-profile:a aac_low",
       ]);
     }
@@ -127,11 +127,21 @@ export default async function handler(
   res: ServerResponse,
 ) {
   if (req.method !== "POST") {
-    console.error(
-      colorizeError("[convertAudio] 변환 실패: Method not allowed"),
-    );
     res.statusCode = 405;
     res.end(JSON.stringify({ error: "Method not allowed" }));
+    return;
+  }
+
+  const R2_ACCESS_KEY_ID = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
+  const R2_SECRET_ACCESS_KEY = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
+  const R2_BUCKET = process.env.CLOUDFLARE_R2_BUCKET;
+  const R2_ENDPOINT = process.env.CLOUDFLARE_R2_ENDPOINT;
+  const R2_PUBLIC_BASE_URL = process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL;
+
+  if (!R2_BUCKET || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_ENDPOINT) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "R2 환경변수 누락" }));
     return;
   }
 
@@ -144,6 +154,7 @@ export default async function handler(
   let parsed: {
     url?: string;
     filename?: string;
+    folder?: string;
     logContext?: {
       channelName?: string;
       episodeTitle?: string;
@@ -158,57 +169,39 @@ export default async function handler(
   try {
     parsed = JSON.parse(body);
   } catch {
-    console.error(colorizeError("[convertAudio] 변환 실패: Invalid JSON"));
     res.statusCode = 400;
     res.end(JSON.stringify({ error: "Invalid JSON" }));
     return;
   }
 
-  const { url, filename, logContext } = parsed;
+  const { url, filename, folder, logContext } = parsed;
   if (!url || !filename) {
-    console.error(
-      colorizeError("[convertAudio] 변환 실패: url, filename 누락"),
-    );
     res.statusCode = 400;
     res.end(JSON.stringify({ error: "url, filename 누락" }));
     return;
   }
 
   const contextPrefix = buildLogPrefix(logContext);
-
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "audio-"));
-  const mp3Path = path.join(tmpDir, "input.mp3");
+  const inputPath = path.join(tmpDir, "input.mp3");
   const m4aPath = path.join(tmpDir, "output.m4a");
 
   try {
-    const downloadStart = Date.now();
-
-    // mp3 다운로드
+    // 1. 오디오 다운로드
     const upstream = await fetch(url);
     if (!upstream.ok) {
-      throw new HttpError(
-        502,
-        `원본 오디오 다운로드 실패 (${upstream.status})`,
-      );
+      throw new HttpError(502, `원본 오디오 다운로드 실패 (${upstream.status})`);
     }
     const arrayBuffer = await upstream.arrayBuffer();
-    const downloadTime = Date.now() - downloadStart;
+    fs.writeFileSync(inputPath, Buffer.from(arrayBuffer));
 
-    const sizeMB = arrayBuffer.byteLength / 1024 / 1024;
-    void sizeMB;
-    void downloadTime;
+    // 2. m4a 변환
+    const sourceCodec = await getSourceAudioCodec(inputPath);
+    const canRemux = !!sourceCodec && M4A_REMUX_CODECS.has(sourceCodec);
 
-    fs.writeFileSync(mp3Path, Buffer.from(arrayBuffer));
-
-    // 가능한 코덱은 무재인코딩 리먹스, 그 외는 웹/앱 재생 호환성이 높은 AAC 인코딩
-    const convertStart = Date.now();
-    const sourceCodec = await getSourceAudioCodec(mp3Path);
-    const canRemuxWithoutReencode =
-      !!sourceCodec && M4A_REMUX_CODECS.has(sourceCodec);
-
-    if (canRemuxWithoutReencode) {
+    if (canRemux) {
       try {
-        await runM4aConvert(mp3Path, m4aPath, "copy");
+        await runM4aConvert(inputPath, m4aPath, "copy");
       } catch (copyErr) {
         const copyMessage =
           copyErr instanceof Error ? copyErr.message : String(copyErr);
@@ -217,40 +210,44 @@ export default async function handler(
             `${contextPrefix} copy 변환 실패, AAC로 재시도: ${copyMessage}`,
           ),
         );
-        await runM4aConvert(mp3Path, m4aPath, "aac");
+        await runM4aConvert(inputPath, m4aPath, "aac");
       }
     } else {
-      await runM4aConvert(mp3Path, m4aPath, "aac");
-    }
-    const convertTime = Date.now() - convertStart;
-    void convertTime;
-
-    let outputSize = fs.statSync(m4aPath).size;
-    if (outputSize > MAX_BASE64_SAFE_BYTES) {
-      console.warn(
-        colorizeError(
-          `${contextPrefix} 무손실 결과가 너무 큼(${Math.round(outputSize / 1024 / 1024)}MB), AAC 320k로 재변환`,
-        ),
-      );
-      await runM4aConvert(mp3Path, m4aPath, "aac");
-      outputSize = fs.statSync(m4aPath).size;
+      await runM4aConvert(inputPath, m4aPath, "aac");
     }
 
-    if (outputSize > MAX_BASE64_SAFE_BYTES) {
-      throw new HttpError(
-        413,
-        "변환 결과 파일이 너무 커 base64 처리 불가 (AAC 재변환 후에도 초과).",
-      );
-    }
+    // 3. R2 직접 업로드 (base64 변환 없음)
+    const s3 = new S3Client({
+      region: "auto",
+      endpoint: R2_ENDPOINT,
+      credentials: {
+        accessKeyId: R2_ACCESS_KEY_ID,
+        secretAccessKey: R2_SECRET_ACCESS_KEY,
+      },
+    });
 
-    const m4aBuffer = fs.readFileSync(m4aPath);
-    const base64 = m4aBuffer.toString("base64");
+    const trimmedFolder = folder
+      ? folder.replace(/^\/+/, "").replace(/\/+$/g, "")
+      : "";
+    const key = trimmedFolder ? `${trimmedFolder}/${filename}` : filename;
 
+    const fileBuffer = fs.readFileSync(m4aPath);
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: R2_BUCKET,
+        Key: key,
+        Body: fileBuffer,
+        ContentType: "audio/mp4",
+      }),
+    );
+
+    const baseUrl = R2_PUBLIC_BASE_URL || R2_ENDPOINT;
+    const resultUrl = `${baseUrl}/${encodeURIComponent(key).replace(/%2F/g, "/")}`;
+
+    console.log(colorizeSuccess(`${contextPrefix} 변환+업로드 완료: ${key}`));
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json");
-    res.end(
-      JSON.stringify({ file: base64, filename, fileSize: m4aBuffer.length }),
-    );
+    res.end(JSON.stringify({ url: resultUrl }));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const statusCode =
@@ -259,7 +256,7 @@ export default async function handler(
         : message.toLowerCase().includes("timeout")
           ? 504
           : 500;
-    console.error(colorizeError(`${contextPrefix} 변환 실패: ${message}`));
+    console.error(colorizeError(`${contextPrefix} 실패: ${message}`));
     res.statusCode = statusCode;
     res.setHeader("Content-Type", "application/json");
     res.end(
@@ -267,9 +264,9 @@ export default async function handler(
         error:
           statusCode === 504
             ? "변환 시간 초과"
-            : statusCode === 413
-              ? "변환 결과 파일이 너무 큼"
-              : "변환 실패",
+            : statusCode === 502
+              ? "원본 오디오 다운로드 실패"
+              : "변환/업로드 실패",
         details: message,
       }),
     );

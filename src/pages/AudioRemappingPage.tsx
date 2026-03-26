@@ -5,7 +5,7 @@ import { GuidePanel } from "../components/GuidePanel";
 import { LABELS } from "../constants/labels";
 import {
   AUDIO_REMAPPING_GUIDE_STEPS,
-  buildEpisodeFolder,
+  BASE_URL,
   DEFAUKLT_LANGUAGE,
 } from "../constants/options";
 import { LANGUAGE_OPTIONS } from "../constants/language";
@@ -38,7 +38,7 @@ interface ProcessResult {
   programId?: number;
   episode: string;
   episodeId?: number;
-  status: "success" | "failed";
+  status: "success" | "failed" | "pass";
   reason?: string;
 }
 
@@ -158,38 +158,19 @@ const AudioRemappingPage = ({
     return `${p}${e} ${channel} ${episode}`;
   };
 
-  const resolveR2Folder = (
-    targetLanguage: string,
-    channelName: string,
-    previousAudioFile?: string,
-  ) => {
+  const resolveR2Folder = (targetLanguage: string) => {
     const normalizedLanguage = String(targetLanguage || "").toLowerCase();
 
-    // 북미(en) 작업은 기존 경로를 참조하지 않고 고정 경로를 사용
+    // 경로 일관성을 위해 언어별 고정 폴더를 사용
+    if (normalizedLanguage === "ko" || normalizedLanguage === "kr") {
+      return "/episodes-audio/m4a";
+    }
+
     if (normalizedLanguage === "en") {
       return "/en-episodes-audio/m4a";
     }
 
-    let folder = buildEpisodeFolder(String(targetLanguage));
-    if (!previousAudioFile?.startsWith("http")) return folder;
-
-    try {
-      const urlPath = new URL(previousAudioFile).pathname;
-      const pathParts = urlPath.split("/").filter((p) => p);
-      if (pathParts.length === 0) return folder;
-
-      // 마지막은 파일명
-      pathParts.pop();
-      const lastPart = decodeURIComponent(
-        pathParts[pathParts.length - 1] || "",
-      );
-      if (lastPart === channelName) {
-        pathParts.pop();
-      }
-      return pathParts.join("/");
-    } catch {
-      return folder;
-    }
+    return `/${normalizedLanguage}-episodes-audio/m4a`;
   };
 
   const formatDate = (dateInput: string | Date | undefined) => {
@@ -267,6 +248,8 @@ const AudioRemappingPage = ({
     return fallback;
   };
 
+  const parseDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const parseSheetData = useCallback(
     (file: File, sheetName: string, start: number, end?: number) => {
       const reader = new FileReader();
@@ -300,6 +283,18 @@ const AudioRemappingPage = ({
       reader.readAsArrayBuffer(file);
     },
     [],
+  );
+
+  // useEffect 의존성 배열의 cleanup 누락 문제를 우회하기 위해 직접 호출 방식 사용
+  const scheduleParse = useCallback(
+    (file: File, sheet: string, start: number, end?: number) => {
+      if (parseDebounceRef.current) clearTimeout(parseDebounceRef.current);
+      if (end !== undefined && end < start) return;
+      parseDebounceRef.current = setTimeout(() => {
+        parseSheetData(file, sheet, start, end);
+      }, 200);
+    },
+    [parseSheetData],
   );
 
   const updateRangeAutomatically = (file: File, sheetName: string) => {
@@ -368,6 +363,10 @@ const AudioRemappingPage = ({
         type: "info",
       },
     ]);
+    // 현재 범위로 즉시 재파싱하여 sheetData를 최신 상태로 갱신
+    if (excelFile && selectedSheet) {
+      scheduleParse(excelFile, selectedSheet, excelStartRow ?? 4, excelEndRow);
+    }
   };
 
   const handleResetForReupload = () => {
@@ -504,11 +503,7 @@ const AudioRemappingPage = ({
                 throw new Error("RSS 매칭 실패");
               }
 
-              const r2Folder = resolveR2Folder(
-                rowLanguage,
-                channelName,
-                episode.audio_file,
-              );
+              const r2Folder = resolveR2Folder(rowLanguage);
               appendLog(
                 `${contextPrefix} 업로드 경로 기준 언어: ${rowLanguage}, 폴더: ${r2Folder}`,
                 "info",
@@ -516,37 +511,57 @@ const AudioRemappingPage = ({
 
               const epSafeTitle = epTitle.replace(/[/\\?%*:|"<>]/g, "-");
               const m4aFilename = `${epSafeTitle}.m4a`;
-              const mp3Filename = `${epSafeTitle}.mp3`;
 
-              const convResult = await convertAll([
+              // 최종 URL을 미리 계산해서 변환 전에 확인
+              const trimmedFolder = r2Folder.trim().replace(/^\/+|\/+$/g, "");
+              const folderPath = trimmedFolder
+                ? `${trimmedFolder
+                    .split("/")
+                    .map((seg) => encodeURIComponent(seg))
+                    .join("/")}/`
+                : "";
+              const expectedFinalUrl =
+                `${BASE_URL}/${folderPath}${encodeURIComponent(
+                  channelName,
+                )}/${encodeURIComponent(m4aFilename)}`.replace(/#/g, "%23");
+
+              // 이미 성공한 경로인지 확인 (변환 전 스킵 로직)
+              if (episode.audio_file === expectedFinalUrl) {
+                episodeProcessed++;
+                const skipPrefix = formatContextPrefix({
+                  programIndex: programIdx,
+                  programTotal,
+                  episodeIndex: episodeProcessed,
+                  episodeTotal,
+                  channelName,
+                  programId: prog.id,
+                  episodeTitle: epTitle,
+                  episodeId: episode.id,
+                });
+                appendLog(
+                  `${skipPrefix} ⏭️ 스킵: 이미 성공한 경로입니다`,
+                  "info",
+                );
+                currentResults.push({
+                  program: channelName,
+                  programId: prog.id,
+                  episode: epTitle,
+                  episodeId: episode.id,
+                  status: "pass",
+                });
+                return;
+              }
+
+              const folder = `${r2Folder.replace(/^\/+/, "")}/${channelName}`;
+              const convertUploadRes = await fetch(
+                "/api/convertAndUploadAudio",
                 {
-                  ...matchedRss,
-                  filename: mp3Filename,
-                  logContext: {
-                    channelName,
-                    episodeTitle: epTitle,
-                    programId: prog.id,
-                    episodeId: episode.id,
-                    programIndex: programIdx,
-                    programTotal,
-                    episodeIndex: episodeProgressHint,
-                    episodeTotal,
-                  },
-                } as any,
-              ]);
-              const rawResult = convResult[mp3Filename];
-              const base64 =
-                typeof rawResult === "object" && rawResult !== null
-                  ? (rawResult as any).file
-                  : rawResult;
-
-              if (!base64) throw new Error("오디오 변환 실패");
-
-              const uploadResult = await uploadAll(
-                [
-                  {
-                    ...matchedRss,
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    url: matchedRss.audioUrl,
                     filename: m4aFilename,
+                    folder,
                     logContext: {
                       channelName,
                       episodeTitle: epTitle,
@@ -557,23 +572,26 @@ const AudioRemappingPage = ({
                       episodeIndex: episodeProgressHint,
                       episodeTotal,
                     },
-                  } as any,
-                ],
-                {
-                  [mp3Filename]: {
-                    status: "done",
-                    file: base64,
-                    progress: 100,
-                  },
+                  }),
                 },
-                r2Folder,
-                channelName,
               );
 
-              const r2Url = uploadResult.urlMap[m4aFilename];
+              if (!convertUploadRes.ok) {
+                const errData = await convertUploadRes.json().catch(() => ({
+                  error: `변환/업로드 실패 (${convertUploadRes.status})`,
+                }));
+                throw new Error(
+                  errData.details ||
+                    errData.error ||
+                    `변환/업로드 실패 (${convertUploadRes.status})`,
+                );
+              }
+
+              const { url: r2Url } = await convertUploadRes.json();
               if (!r2Url) throw new Error("업로드 실패");
 
-              const finalUrl = r2Url.replace(/#/g, "%23");
+              const finalUrl = (r2Url as string).replace(/#/g, "%23");
+
               const { error: updateErr } = await supabase
                 .from("episodes")
                 .update({ audio_file: finalUrl })
@@ -697,14 +715,17 @@ const AudioRemappingPage = ({
       const successCount = currentResults.filter(
         (result) => result.status === "success",
       ).length;
+      const passCount = currentResults.filter(
+        (result) => result.status === "pass",
+      ).length;
       const failedCount = currentResults.filter(
         (result) => result.status === "failed",
       ).length;
       const totalCount = currentResults.length;
       appendLog(
         failedCount > 0
-          ? `⚠️ 작업 종료 (성공: ${successCount}건, 실패: ${failedCount}건, 전체: ${totalCount}건)`
-          : `🎉 작업 종료 (성공: ${successCount}건, 전체: ${totalCount}건)`,
+          ? `⚠️ 작업 종료 (성공: ${successCount}건, 패스: ${passCount}건, 실패: ${failedCount}건, 전체: ${totalCount}건)`
+          : `🎉 작업 종료 (성공: ${successCount}건, 패스: ${passCount}건, 전체: ${totalCount}건)`,
         failedCount > 0 ? "error" : "success",
       );
       setProcessResults(currentResults);
@@ -712,20 +733,16 @@ const AudioRemappingPage = ({
     }
   }, [sheetData, selectedLanguage, convertAll, uploadAll, isProcessing]);
 
+  const isRangeInvalid =
+    excelEndRow !== undefined && excelEndRow < (excelStartRow ?? 4);
+
+  // 파일/시트 변경 시에만 재파싱 (range 변경은 onChange에서 scheduleParse로 직접 처리)
   useEffect(() => {
     if (excelFile && selectedSheet) {
       const startRow = excelStartRow ?? 4;
-      if (excelEndRow !== undefined && excelEndRow < startRow) {
-        setSheetData([]);
-        return;
-      }
-      const debounceId = window.setTimeout(() => {
-        parseSheetData(excelFile, selectedSheet, startRow, excelEndRow);
-      }, 200);
-
-      return () => window.clearTimeout(debounceId);
+      scheduleParse(excelFile, selectedSheet, startRow, excelEndRow);
     }
-  }, [excelFile, selectedSheet, excelStartRow, excelEndRow, parseSheetData]);
+  }, [excelFile, selectedSheet]);
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -860,6 +877,14 @@ const AudioRemappingPage = ({
                       : undefined;
                     setExcelStartRow(newStart);
                     setIsAllRows(false);
+                    if (excelFile && selectedSheet) {
+                      scheduleParse(
+                        excelFile,
+                        selectedSheet,
+                        newStart ?? 4,
+                        excelEndRow,
+                      );
+                    }
                   }}
                   className={inputClass + " w-24"}
                   placeholder="4"
@@ -876,6 +901,14 @@ const AudioRemappingPage = ({
                       : undefined;
                     setExcelEndRow(newEnd);
                     setIsAllRows(false);
+                    if (excelFile && selectedSheet) {
+                      scheduleParse(
+                        excelFile,
+                        selectedSheet,
+                        excelStartRow ?? 4,
+                        newEnd,
+                      );
+                    }
                   }}
                   className={inputClass + " w-24"}
                   placeholder={
@@ -889,71 +922,80 @@ const AudioRemappingPage = ({
 
           {/* 미리보기 테이블 */}
           {sheetData.length > 0 && (
-            <>
-              <div className={fieldClass}>
-                <span className={fieldLabelClass}>
-                  매핑 데이터 미리보기 (상위 10행)
-                </span>
-                <div className="overflow-x-auto rounded shadow border bg-linear-to-br from-white to-slate-50">
-                  <table className="min-w-full text-xs border-separate border-spacing-0">
-                    <thead className="sticky top-0 z-10">
-                      <tr>
+            <div className={fieldClass}>
+              <span className={fieldLabelClass}>
+                매핑 데이터 미리보기 (상위 10행)
+              </span>
+              <div className="overflow-x-auto rounded shadow border bg-linear-to-br from-white to-slate-50">
+                <table className="min-w-full text-xs border-separate border-spacing-0">
+                  <thead className="sticky top-0 z-10">
+                    <tr>
+                      {REQUIRED_COLUMNS.map((col) => (
+                        <th
+                          key={col}
+                          className="px-4 py-2 font-bold text-slate-700 bg-slate-100 border-b border-slate-200 text-left"
+                          style={{
+                            position: "sticky",
+                            top: 0,
+                            background: "#f8fafc",
+                          }}
+                        >
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sheetData.slice(0, 10).map((row, i) => (
+                      <tr
+                        key={i}
+                        className={
+                          "transition-colors border-b border-slate-100 " +
+                          (i % 2 === 0 ? "bg-white" : "bg-slate-50") +
+                          " hover:bg-yellow-50 group"
+                        }
+                      >
                         {REQUIRED_COLUMNS.map((col) => (
-                          <th
+                          <td
                             key={col}
-                            className="px-4 py-2 font-bold text-slate-700 bg-slate-100 border-b border-slate-200 text-left"
+                            className="px-4 py-2 text-slate-800 border-r border-slate-100 group-last:border-r-0 group-hover:bg-yellow-50"
                             style={{
-                              position: "sticky",
-                              top: 0,
-                              background: "#f8fafc",
+                              maxWidth: 180,
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
                             }}
+                            title={String(row[col] || "")}
                           >
-                            {col}
-                          </th>
+                            {row[col]}
+                          </td>
                         ))}
                       </tr>
-                    </thead>
-                    <tbody>
-                      {sheetData.slice(0, 10).map((row, i) => (
-                        <tr
-                          key={i}
-                          className={
-                            "transition-colors border-b border-slate-100 " +
-                            (i % 2 === 0 ? "bg-white" : "bg-slate-50") +
-                            " hover:bg-yellow-50 group"
-                          }
-                        >
-                          {REQUIRED_COLUMNS.map((col) => (
-                            <td
-                              key={col}
-                              className="px-4 py-2 text-slate-800 border-r border-slate-100 group-last:border-r-0 group-hover:bg-yellow-50"
-                              style={{
-                                maxWidth: 180,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                              title={String(row[col] || "")}
-                            >
-                              {row[col]}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div className={fieldClass}>
-                <button
-                  onClick={handleRemapAll}
-                  disabled={isProcessing}
-                  className={ghostButtonClass + " px-8 py-2"}
-                >
-                  {isProcessing ? "처리 중..." : "작업 시작"}
-                </button>
-              </div>
-            </>
+            </div>
+          )}
+
+          {/* 작업 시작 버튼 - 파일이 로드된 경우 항상 표시 */}
+          {rawRows.length > 1 && (
+            <div className={fieldClass}>
+              {isRangeInvalid && (
+                <p className="mb-2 text-sm text-rose-500">
+                  끝 행이 시작 행보다 작습니다. 범위를 올바르게 입력해 주세요.
+                </p>
+              )}
+              <button
+                onClick={handleRemapAll}
+                disabled={
+                  isProcessing || isRangeInvalid || sheetData.length === 0
+                }
+                className={ghostButtonClass + " px-8 py-2"}
+              >
+                {isProcessing ? "처리 중..." : "작업 시작"}
+              </button>
+            </div>
           )}
 
           {/* 진행 로그 */}
@@ -1067,9 +1109,19 @@ const AudioRemappingPage = ({
                         </td>
                         <td className="px-4 py-2 border-r border-slate-100 text-center">
                           <span
-                            className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${res.status === "success" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}
+                            className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                              res.status === "success"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : res.status === "pass"
+                                  ? "bg-amber-100 text-amber-700"
+                                  : "bg-rose-100 text-rose-700"
+                            }`}
                           >
-                            {res.status === "success" ? "SUCCESS" : "FAILED"}
+                            {res.status === "success"
+                              ? "SUCCESS"
+                              : res.status === "pass"
+                                ? "PASS"
+                                : "FAILED"}
                           </span>
                         </td>
                         <td
@@ -1090,12 +1142,14 @@ const AudioRemappingPage = ({
             <div className={fieldClass}>
               <span className={fieldLabelClass}>작업 후 선택</span>
               <div className="flex flex-wrap gap-3">
+                {/* 
                 <button
                   onClick={handleContinueWithCurrentFile}
                   className={ghostButtonClass + " px-5 py-2"}
                 >
                   현재 파일로 이어서 작업
                 </button>
+                */}
                 <button
                   onClick={handleResetForReupload}
                   className={ghostButtonClass + " px-5 py-2"}

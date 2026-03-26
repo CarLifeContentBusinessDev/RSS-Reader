@@ -1,0 +1,13 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  node_bundler = "esbuild"
+  # 최대 타임아웃 (Pro 플랜: 26초, 무료 플랜: 10초)
+  timeout = 26
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

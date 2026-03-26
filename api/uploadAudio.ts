@@ -97,7 +97,23 @@ export default async function handler(
     return;
   }
 
-  const { folder, filename, file, logContext } = req.body ?? {};
+  let rawBody = "";
+  await new Promise<void>((resolve) => {
+    req.on("data", (chunk) => (rawBody += chunk));
+    req.on("end", resolve);
+  });
+
+  let parsedBody: { folder?: string; filename?: string; file?: string; logContext?: unknown };
+  try {
+    parsedBody = JSON.parse(rawBody);
+  } catch {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "Invalid JSON" }));
+    return;
+  }
+
+  const { folder, filename, file, logContext } = parsedBody;
 
   if (!file || !filename) {
     console.error(
