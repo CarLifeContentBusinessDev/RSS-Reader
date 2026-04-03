@@ -512,9 +512,19 @@ const AudioRemappingPage = ({
                   const rssNorm = normalizeTitle(item.title);
                   const rssItunesNorm = normalizeTitle(item.itunesTitle || "");
                   const rssDate = formatDate(item.date || item.pubDate);
+                  const titleIncludedByRss =
+                    Boolean(epNorm) &&
+                    Boolean(rssNorm) &&
+                    rssNorm.includes(epNorm);
+                  const titleIncludedByItunes =
+                    Boolean(epNorm) &&
+                    Boolean(rssItunesNorm) &&
+                    rssItunesNorm.includes(epNorm);
                   return (
                     rssNorm === epNorm ||
                     (rssItunesNorm && rssItunesNorm === epNorm) ||
+                    titleIncludedByRss ||
+                    titleIncludedByItunes ||
                     (epDate && epDate === rssDate)
                   );
                 });
