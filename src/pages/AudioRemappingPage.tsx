@@ -21,6 +21,7 @@ import type { ToastTone } from "../types";
 import { supabase } from "../lib/supabaseClient";
 import { useAudioConvert } from "../hooks/useAudioConvert";
 import { useAudioUpload } from "../hooks/useAudioUpload";
+import { formatDuration } from "../utils/format";
 import { parseRss } from "../utils/rss";
 
 // 타입 정의
@@ -183,6 +184,9 @@ const AudioRemappingPage = ({
       return "";
     }
   };
+
+  const normalizeDuration = (duration: string | number | undefined) =>
+    formatDuration(duration ?? null);
 
   const getRowLanguage = (row: ExcelRow, fallback = DEFAUKLT_LANGUAGE) => {
     const raw =
@@ -353,22 +357,6 @@ const AudioRemappingPage = ({
     }
   };
 
-  const handleContinueWithCurrentFile = () => {
-    setHasCompletedRun(false);
-    setProcessResults([]);
-    setLogs([
-      {
-        message:
-          "🧭 현재 파일/시트/범위를 유지한 상태로 재작업을 준비했습니다.",
-        type: "info",
-      },
-    ]);
-    // 현재 범위로 즉시 재파싱하여 sheetData를 최신 상태로 갱신
-    if (excelFile && selectedSheet) {
-      scheduleParse(excelFile, selectedSheet, excelStartRow ?? 4, excelEndRow);
-    }
-  };
-
   const handleResetForReupload = () => {
     setExcelFile(null);
     setSheetNames([]);
@@ -454,13 +442,23 @@ const AudioRemappingPage = ({
 
           const { data: episodes } = await supabase
             .from("episodes")
-            .select("id, title, audio_file, date")
+            .select("id, title, audio_file, date, duration")
             .eq("program_id", prog.id);
           if (!episodes) throw new Error("에피소드 목록 조회 실패");
 
           const rssRes = await fetch(
             `/api/rss?url=${encodeURIComponent(rssUrl)}`,
           );
+          if (!rssRes.ok) {
+            const failureText = await rssRes.text();
+            const failurePreview = failureText
+              .slice(0, 180)
+              .replace(/\s+/g, " ")
+              .trim();
+            throw new Error(
+              `RSS 요청 실패 (${rssRes.status}): ${failurePreview || rssRes.statusText}`,
+            );
+          }
           const rssText = await rssRes.text();
           const { items: rssItems } = parseRss(
             rssText,
@@ -488,16 +486,38 @@ const AudioRemappingPage = ({
 
               const epNorm = normalizeTitle(epTitle);
               const epDate = formatDate(episode.date);
-              const matchedRss = rssItems.find((item) => {
-                const rssNorm = normalizeTitle(item.title);
-                const rssItunesNorm = normalizeTitle(item.itunesTitle || "");
+              const epDuration = normalizeDuration(episode.duration);
+              const matchedRssByDate = rssItems.find((item) => {
+                const rssPubDate = formatDate(item.pubDate);
                 const rssDate = formatDate(item.date || item.pubDate);
+                return epDate && (epDate === rssPubDate || epDate === rssDate);
+              });
+
+              const matchedRssByDateAndDuration = rssItems.find((item) => {
+                const rssPubDate = formatDate(item.pubDate);
+                const rssDate = formatDate(item.date || item.pubDate);
+                const rssDuration = normalizeDuration(item.duration);
                 return (
-                  rssNorm === epNorm ||
-                  (rssItunesNorm && rssItunesNorm === epNorm) ||
-                  (epDate && epDate === rssDate)
+                  epDate &&
+                  (epDate === rssPubDate || epDate === rssDate) &&
+                  epDuration &&
+                  epDuration === rssDuration
                 );
               });
+
+              const matchedRss =
+                matchedRssByDateAndDuration ??
+                matchedRssByDate ??
+                rssItems.find((item) => {
+                  const rssNorm = normalizeTitle(item.title);
+                  const rssItunesNorm = normalizeTitle(item.itunesTitle || "");
+                  const rssDate = formatDate(item.date || item.pubDate);
+                  return (
+                    rssNorm === epNorm ||
+                    (rssItunesNorm && rssItunesNorm === epNorm) ||
+                    (epDate && epDate === rssDate)
+                  );
+                });
 
               if (!matchedRss) {
                 throw new Error("RSS 매칭 실패");
@@ -1142,14 +1162,6 @@ const AudioRemappingPage = ({
             <div className={fieldClass}>
               <span className={fieldLabelClass}>작업 후 선택</span>
               <div className="flex flex-wrap gap-3">
-                {/* 
-                <button
-                  onClick={handleContinueWithCurrentFile}
-                  className={ghostButtonClass + " px-5 py-2"}
-                >
-                  현재 파일로 이어서 작업
-                </button>
-                */}
                 <button
                   onClick={handleResetForReupload}
                   className={ghostButtonClass + " px-5 py-2"}

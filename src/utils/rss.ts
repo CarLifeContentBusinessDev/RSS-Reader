@@ -4,6 +4,19 @@ import { formatDateYYMMDD, formatDuration } from "./format";
 import { buildItemsWithChannel } from "./r2";
 import { buildSqlText } from "./sql";
 
+const sanitizeXmlText = (xmlText: string) => {
+  const strippedBom = String(xmlText || "").replace(/^\uFEFF/, "");
+  const strippedControlChars = strippedBom.replace(
+    /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,
+    "",
+  );
+  const firstTagIndex = strippedControlChars.indexOf("<");
+  if (firstTagIndex > 0) {
+    return strippedControlChars.slice(firstTagIndex);
+  }
+  return strippedControlChars;
+};
+
 const getFirstByLocalName = (root: ParentNode, localName: string) => {
   const nodes = Array.from(root.querySelectorAll("*"));
   const lowered = localName.toLowerCase();
@@ -25,11 +38,15 @@ export const parseRss = (
   r2Folder: string = "de-episodes-audio/program",
 ) => {
   const parser = new DOMParser();
-  const doc = parser.parseFromString(xmlText, "text/xml");
+  const normalizedXmlText = sanitizeXmlText(xmlText);
+  const doc = parser.parseFromString(normalizedXmlText, "text/xml");
   const parseError = doc.querySelector("parsererror");
 
   if (parseError) {
-    throw new Error("유효하지 않은 XML 응답입니다.");
+    const preview = normalizedXmlText.slice(0, 180).replace(/\s+/g, " ").trim();
+    throw new Error(
+      `유효하지 않은 XML 응답입니다. 응답 미리보기: ${preview || "(empty)"}`,
+    );
   }
 
   const channelTitleRaw =
@@ -83,11 +100,15 @@ export const parseRss = (
 
 export const parseProgramRss = (xmlText: string): ParsedProgram => {
   const parser = new DOMParser();
-  const doc = parser.parseFromString(xmlText, "text/xml");
+  const normalizedXmlText = sanitizeXmlText(xmlText);
+  const doc = parser.parseFromString(normalizedXmlText, "text/xml");
   const parseError = doc.querySelector("parsererror");
 
   if (parseError) {
-    throw new Error("유효하지 않은 XML 응답입니다.");
+    const preview = normalizedXmlText.slice(0, 180).replace(/\s+/g, " ").trim();
+    throw new Error(
+      `유효하지 않은 XML 응답입니다. 응답 미리보기: ${preview || "(empty)"}`,
+    );
   }
 
   const title =
