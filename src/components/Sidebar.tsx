@@ -4,6 +4,7 @@ const MENU_LINK = [
   { name: "프로그램", href: "/" },
   { name: "에피소드", href: "/episodes" },
   { name: "오디오파일 재매핑", href: "/audio-remapping" },
+  { name: "오디오파일 변환", href: "/audio-convert" },
 ];
 
 const NAV_LINK = [

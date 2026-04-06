@@ -15,8 +15,7 @@ const ANSI = {
   green: "\x1b[32m",
 };
 
-const colorizeError = (message: string) =>
-  `${ANSI.red}${message}${ANSI.reset}`;
+const colorizeError = (message: string) => `${ANSI.red}${message}${ANSI.reset}`;
 const colorizeSuccess = (message: string) =>
   `${ANSI.green}${message}${ANSI.reset}`;
 
@@ -87,10 +86,10 @@ const runM4aConvert = async (
     if (mode === "copy") {
       command.outputOptions(["-c:a copy", "-movflags +faststart"]);
     } else {
-      command.audioCodec("aac").audioBitrate("320k").outputOptions([
-        "-movflags +faststart",
-        "-profile:a aac_low",
-      ]);
+      command
+        .audioCodec("aac")
+        .audioBitrate("320k")
+        .outputOptions(["-movflags +faststart", "-profile:a aac_low"]);
     }
 
     command
@@ -138,7 +137,12 @@ export default async function handler(
   const R2_ENDPOINT = process.env.CLOUDFLARE_R2_ENDPOINT;
   const R2_PUBLIC_BASE_URL = process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL;
 
-  if (!R2_BUCKET || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_ENDPOINT) {
+  if (
+    !R2_BUCKET ||
+    !R2_ACCESS_KEY_ID ||
+    !R2_SECRET_ACCESS_KEY ||
+    !R2_ENDPOINT
+  ) {
     res.statusCode = 500;
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({ error: "R2 환경변수 누락" }));
@@ -153,6 +157,8 @@ export default async function handler(
 
   let parsed: {
     url?: string;
+    file?: string;
+    originalFilename?: string;
     filename?: string;
     folder?: string;
     logContext?: {
@@ -174,26 +180,37 @@ export default async function handler(
     return;
   }
 
-  const { url, filename, folder, logContext } = parsed;
-  if (!url || !filename) {
+  const { url, file, originalFilename, filename, folder, logContext } = parsed;
+  if ((!url && !file) || !filename) {
     res.statusCode = 400;
-    res.end(JSON.stringify({ error: "url, filename 누락" }));
+    res.end(JSON.stringify({ error: "url/file, filename 누락" }));
     return;
   }
 
   const contextPrefix = buildLogPrefix(logContext);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "audio-"));
-  const inputPath = path.join(tmpDir, "input.mp3");
+  const sourceExt = originalFilename
+    ? path.extname(originalFilename).toLowerCase() || ".mp3"
+    : ".mp3";
+  const inputPath = path.join(tmpDir, `input${sourceExt}`);
   const m4aPath = path.join(tmpDir, "output.m4a");
 
   try {
-    // 1. 오디오 다운로드
-    const upstream = await fetch(url);
-    if (!upstream.ok) {
-      throw new HttpError(502, `원본 오디오 다운로드 실패 (${upstream.status})`);
+    // 1. 오디오 입력 확보 (URL 또는 base64 파일)
+    if (file) {
+      const inputBuffer = Buffer.from(file, "base64");
+      fs.writeFileSync(inputPath, inputBuffer);
+    } else {
+      const upstream = await fetch(url!);
+      if (!upstream.ok) {
+        throw new HttpError(
+          502,
+          `원본 오디오 다운로드 실패 (${upstream.status})`,
+        );
+      }
+      const arrayBuffer = await upstream.arrayBuffer();
+      fs.writeFileSync(inputPath, Buffer.from(arrayBuffer));
     }
-    const arrayBuffer = await upstream.arrayBuffer();
-    fs.writeFileSync(inputPath, Buffer.from(arrayBuffer));
 
     // 2. m4a 변환
     const sourceCodec = await getSourceAudioCodec(inputPath);

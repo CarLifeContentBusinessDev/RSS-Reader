@@ -3,6 +3,7 @@ import { Route, Routes } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import { supabase } from "./lib/supabaseClient";
+import AudioConvertPage from "./pages/AudioConvertPage";
 import AudioRemappingPage from "./pages/AudioRemappingPage";
 import EpisodesPage from "./pages/EpisodesPage";
 import ProgramsPage from "./pages/ProgramsPage";
@@ -169,6 +170,19 @@ function App() {
             path="/audio-remapping"
             element={
               <AudioRemappingPage
+                authUserEmail={authUserEmail}
+                onRequireLogin={() => {
+                  setAuthError("");
+                  setShowAuthModal(true);
+                }}
+                showToast={showToast}
+              />
+            }
+          />
+          <Route
+            path="/audio-convert"
+            element={
+              <AudioConvertPage
                 authUserEmail={authUserEmail}
                 onRequireLogin={() => {
                   setAuthError("");
