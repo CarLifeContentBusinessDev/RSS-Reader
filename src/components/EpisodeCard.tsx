@@ -1,3 +1,4 @@
+import type { KeyboardEvent, MouseEvent } from "react";
 import { inputClass, textButtonClass } from "../constants/style";
 import type { ConvertState } from "../hooks/useAudioConvert";
 import type { UploadState } from "../hooks/useAudioUpload";
@@ -9,11 +10,13 @@ interface EpisodeCardProps {
   downloadProgress: number | null | undefined;
   convertState?: ConvertState;
   uploadState?: UploadState;
+  selected: boolean;
   onDownload: (url: string, filename: string) => void;
   onStartEditDuration: (filename: string) => void;
   onUpdateEditingDuration: (filename: string, value: string) => void;
   onConfirmEditDuration: (filename: string) => void;
   onCancelEditDuration: (filename: string) => void;
+  onSelectionChange: (filename: string, selected: boolean) => void;
 }
 
 export function EpisodeCard({
@@ -22,18 +25,62 @@ export function EpisodeCard({
   downloadProgress,
   convertState,
   uploadState,
+  selected,
   onDownload,
   onStartEditDuration,
   onUpdateEditingDuration,
   onConfirmEditDuration,
   onCancelEditDuration,
+  onSelectionChange,
 }: EpisodeCardProps) {
   const durationChanged =
     originalDuration !== undefined && originalDuration !== item.duration;
 
+  const toggleSelection = () => {
+    onSelectionChange(item.filename, !selected);
+  };
+
+  const handleCardClick = (e: MouseEvent<HTMLElement>) => {
+    const target = e.target as HTMLElement;
+    if (target.closest("a, button, input, textarea, select, label")) {
+      return;
+    }
+    toggleSelection();
+  };
+
+  const handleCardKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const target = e.target as HTMLElement;
+    if (target.closest("a, button, input, textarea, select, label")) {
+      return;
+    }
+    e.preventDefault();
+    toggleSelection();
+  };
+
   return (
-    <article className="grid gap-4 rounded-[18px] border border-panel-border bg-surface p-5 animate-fadeInUp">
-      <h3 className="text-[1.05rem] font-semibold">{item.title}</h3>
+    <article
+      className={`grid gap-4 rounded-[18px] border bg-surface p-5 animate-fadeInUp transition-colors ${
+        selected
+          ? "border-accent bg-[rgba(195,122,72,0.08)]"
+          : "border-panel-border"
+      }`}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
+      tabIndex={0}
+      aria-pressed={selected}
+    >
+      <div className="flex items-start gap-3">
+        <input
+          className="mt-1 h-4.5 w-4.5 accent-accent"
+          type="checkbox"
+          checked={selected}
+          onChange={(e) => onSelectionChange(item.filename, e.target.checked)}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`${item.title} 선택`}
+        />
+        <h3 className="text-[1.05rem] font-semibold">{item.title}</h3>
+      </div>
       <dl className="grid gap-2.5">
         {/* 날짜 */}
         <div>

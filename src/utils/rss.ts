@@ -30,6 +30,86 @@ const getFirstByLocalName = (root: ParentNode, localName: string) => {
   );
 };
 
+export type DateFilterType =
+  | { type: "count"; value: number }
+  | { type: "year"; year: number }
+  | { type: "yearMonth"; year: number; month: number };
+
+const MIN_YEAR = 1900;
+const MAX_YEAR = 2099;
+
+const parseItemDateParts = (item: ParsedItem) => {
+  const fromPubDate = item.pubDate ? new Date(item.pubDate) : null;
+  if (fromPubDate && !Number.isNaN(fromPubDate.getTime())) {
+    return {
+      year: fromPubDate.getFullYear(),
+      month: fromPubDate.getMonth() + 1,
+    };
+  }
+
+  const fromFormattedDate = item.date.match(/^(\d{2})\.(\d{2})\.(\d{2})$/);
+  if (fromFormattedDate) {
+    return {
+      year: 2000 + Number(fromFormattedDate[1]),
+      month: Number(fromFormattedDate[2]),
+    };
+  }
+
+  return null;
+};
+
+export const parseDateFilter = (limitInput: string): DateFilterType => {
+  const trimmed = limitInput.trim();
+
+  const yearMonthMatch = trimmed.match(/^(\d{4})-(\d{2})$/);
+  if (yearMonthMatch) {
+    const year = Number(yearMonthMatch[1]);
+    const month = Number(yearMonthMatch[2]);
+    if (year >= MIN_YEAR && year <= MAX_YEAR && month >= 1 && month <= 12) {
+      return { type: "yearMonth", year, month };
+    }
+  }
+
+  const yearMatch = trimmed.match(/^(\d{4})$/);
+  if (yearMatch) {
+    const year = Number(yearMatch[1]);
+    if (year >= MIN_YEAR && year <= MAX_YEAR) {
+      return { type: "year", year };
+    }
+  }
+
+  const numberMatch = trimmed.match(/^\d+$/);
+  if (numberMatch) {
+    return { type: "count", value: Math.max(1, Number(trimmed)) };
+  }
+
+  return { type: "count", value: 10 };
+};
+
+export const filterItemsByDateFilter = (
+  items: ParsedItem[],
+  filter: DateFilterType,
+): ParsedItem[] => {
+  if (filter.type === "count") {
+    return items.slice(0, filter.value);
+  }
+
+  if (filter.type === "year") {
+    return items.filter(
+      (item) => parseItemDateParts(item)?.year === filter.year,
+    );
+  }
+
+  if (filter.type === "yearMonth") {
+    return items.filter((item) => {
+      const parsed = parseItemDateParts(item);
+      return parsed?.year === filter.year && parsed?.month === filter.month;
+    });
+  }
+
+  return items;
+};
+
 export const parseRss = (
   xmlText: string,
   limit: number,

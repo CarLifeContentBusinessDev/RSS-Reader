@@ -20,6 +20,9 @@ interface EpisodeInfoEditorProps {
   convertSummary: { total: number; completed: number; failed: number };
   uploadStates: Record<string, UploadState>;
   uploadSummary: { total: number; completed: number; failed: number };
+  selectedCount: number;
+  totalCount: number;
+  isAllSelected: boolean;
   sqlText: string;
   isSending: boolean;
   onDownload: (url: string, filename: string) => void;
@@ -27,8 +30,16 @@ interface EpisodeInfoEditorProps {
   onUpdateEditingDuration: (filename: string, value: string) => void;
   onConfirmEditDuration: (filename: string) => void;
   onCancelEditDuration: (filename: string) => void;
-  r2Folder: string;
-  onResetToOriginal: () => void;
+  isEpisodeSelected: (filename: string) => boolean;
+  onEpisodeSelectionChange: (filename: string, selected: boolean) => void;
+  onSelectAllEpisodes: () => void;
+  onClearSelectedEpisodes: () => void;
+  onConvertAll: () => void;
+  onUploadAll: () => void;
+  isConvertDisabled: boolean;
+  isUploadDisabled: boolean;
+  convertButtonLabel: string;
+  uploadButtonLabel: string;
   onSendToSupabase: () => void;
 }
 
@@ -44,6 +55,9 @@ export function EpisodeInfoEditor({
   convertSummary,
   uploadStates,
   uploadSummary,
+  selectedCount,
+  totalCount,
+  isAllSelected,
   sqlText,
   isSending,
   onDownload,
@@ -51,8 +65,16 @@ export function EpisodeInfoEditor({
   onUpdateEditingDuration,
   onConfirmEditDuration,
   onCancelEditDuration,
-  r2Folder,
-  onResetToOriginal,
+  isEpisodeSelected,
+  onEpisodeSelectionChange,
+  onSelectAllEpisodes,
+  onClearSelectedEpisodes,
+  onConvertAll,
+  onUploadAll,
+  isConvertDisabled,
+  isUploadDisabled,
+  convertButtonLabel,
+  uploadButtonLabel,
   onSendToSupabase,
 }: EpisodeInfoEditorProps) {
   return (
@@ -111,6 +133,32 @@ export function EpisodeInfoEditor({
       </div>
 
       {/* 에피소드 카드 목록 */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-panel-border/70 bg-[rgba(16,35,35,0.03)] px-4 py-3">
+        <p className="text-[0.9rem] font-semibold text-ink-muted">
+          선택된 에피소드 {selectedCount}/{totalCount}
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            className={ghostButtonClass}
+            type="button"
+            onClick={
+              isAllSelected ? onClearSelectedEpisodes : onSelectAllEpisodes
+            }
+            disabled={!totalCount}
+          >
+            {isAllSelected ? "전체 해제" : "전체 선택"}
+          </button>
+          <button
+            className={ghostButtonClass}
+            type="button"
+            onClick={onClearSelectedEpisodes}
+            disabled={!selectedCount}
+          >
+            선택 해제
+          </button>
+        </div>
+      </div>
+
       <div className="grid gap-5 grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
         {items.map((item) => {
           const originalItem = originalItems.find(
@@ -135,6 +183,8 @@ export function EpisodeInfoEditor({
               onUpdateEditingDuration={onUpdateEditingDuration}
               onConfirmEditDuration={onConfirmEditDuration}
               onCancelEditDuration={onCancelEditDuration}
+              selected={isEpisodeSelected(item.filename)}
+              onSelectionChange={onEpisodeSelectionChange}
             />
           );
         })}
@@ -144,23 +194,21 @@ export function EpisodeInfoEditor({
       <div className="grid gap-4">
         <div className="col-span-full flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-4">
-            <a
-              className={ghostButtonClass}
-              href={`https://dash.cloudflare.com/194031f1919f524b4ecbf1ad3c5f60f9/r2/default/buckets/pickle-demo?prefix=${encodeURIComponent(
-                r2Folder.replace(/^\/+/, ""),
-              )}%2F${encodeURIComponent(channelOverride || channelTitle)}%2F`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              폴더 바로가기
-            </a>
             <button
               className={ghostButtonClass}
               type="button"
-              onClick={onResetToOriginal}
-              disabled={!originalItems.length}
+              onClick={onConvertAll}
+              disabled={isConvertDisabled}
             >
-              원래대로
+              {convertButtonLabel}
+            </button>
+            <button
+              className={ghostButtonClass}
+              type="button"
+              onClick={onUploadAll}
+              disabled={isUploadDisabled}
+            >
+              {uploadButtonLabel}
             </button>
           </div>
           <button

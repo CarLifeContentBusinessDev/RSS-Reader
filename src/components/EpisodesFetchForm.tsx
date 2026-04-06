@@ -86,78 +86,83 @@ export function EpisodesFetchForm({
       </label>
 
       {/* Language / Program ID / Limit */}
-      <div className="grid gap-4 md:grid-cols-[repeat(auto-fit,minmax(160px,1fr))]">
+      <div className="grid gap-x-6 gap-y-1 md:grid-cols-3">
+        <div className="min-h-6 flex items-center">
+          <span className={fieldLabelClass}>언어</span>
+        </div>
+        <div className="min-h-6 flex items-center gap-2">
+          <span className={fieldLabelClass}>프로그램 ID</span>
+          {programSearched && programOptions.length > 0 && (
+            <button
+              type="button"
+              className={textButtonClass}
+              style={{ padding: 0, fontSize: "0.95em", lineHeight: 1 }}
+              onClick={onToggleInputMode}
+            >
+              {programInputMode === "select" ? "직접 입력" : "검색 결과"}
+            </button>
+          )}
+        </div>
+        <div className="min-h-6 flex items-center">
+          <span className={fieldLabelClass}>조회 범위</span>
+        </div>
+
         <SelectField
-          label="Language"
+          label=""
           value={language}
           options={LANGUAGE_OPTIONS}
           onChange={onLanguageChange}
-          className="mt-1"
+          className="w-full"
         />
 
-        {/* Program ID */}
-        <div className={fieldClass}>
-          <div className="flex items-center gap-2 mb-1">
-            <span className={fieldLabelClass}>Program ID</span>
-            {programSearched && programOptions.length > 0 && (
-              <button
-                type="button"
-                className={textButtonClass}
-                style={{ padding: 0, fontSize: "0.95em" }}
-                onClick={onToggleInputMode}
-              >
-                {programInputMode === "select" ? "직접 입력" : "검색 결과"}
-              </button>
+        <div className="flex gap-2 items-center">
+          <div className="w-full">
+            {programInputMode === "select" && programOptions.length > 0 ? (
+              <SelectField
+                label=""
+                value={programId}
+                options={[
+                  { value: "", label: "선택하세요" },
+                  ...programOptions,
+                ]}
+                onChange={onProgramIdChange}
+                className="w-full"
+              />
+            ) : (
+              <input
+                type="number"
+                value={programId}
+                onChange={(e) => onProgramIdChange(e.target.value)}
+                placeholder="직접 입력 또는 검색"
+                min={0}
+                className={`${inputClass} w-full`}
+              />
             )}
           </div>
-          <div className="flex gap-2 items-center">
-            <div className="w-full">
-              {programInputMode === "select" && programOptions.length > 0 ? (
-                <SelectField
-                  label=""
-                  value={programId}
-                  options={[
-                    { value: "", label: "선택하세요" },
-                    ...programOptions,
-                  ]}
-                  onChange={onProgramIdChange}
-                  className="w-full"
-                />
-              ) : (
-                <input
-                  type="number"
-                  value={programId}
-                  onChange={(e) => onProgramIdChange(e.target.value)}
-                  placeholder="직접 입력 또는 검색"
-                  min={0}
-                  className={`${inputClass} w-full`}
-                />
-              )}
-            </div>
-            <button
-              type="button"
-              className={ghostButtonClass}
-              onClick={onProgramSearch}
-              disabled={!rssUrl || isProgramSearching}
-              style={{ whiteSpace: "nowrap" }}
-            >
-              {isProgramSearching ? "검색 중..." : "검색"}
-            </button>
-          </div>
+          <button
+            type="button"
+            className={ghostButtonClass}
+            onClick={onProgramSearch}
+            disabled={!rssUrl || isProgramSearching}
+            style={{ whiteSpace: "nowrap" }}
+          >
+            {isProgramSearching ? "검색 중..." : "검색"}
+          </button>
         </div>
 
-        {/* Limit */}
-        <label className={fieldClass}>
-          <span className={fieldLabelClass}>Limit</span>
-          <input
-            type="number"
-            value={limit}
-            onChange={(e) => onLimitChange(e.target.value)}
-            min={1}
-            max={50}
-            className={inputClass}
-          />
-        </label>
+        <input
+          type="text"
+          value={limit}
+          onChange={(e) => onLimitChange(e.target.value)}
+          placeholder="10 / 2025 / 2025-03"
+          className={inputClass}
+        />
+
+        <div />
+        <div />
+        <p className="text-[0.75rem] text-ink-muted">
+          숫자: 최신 N개 | YYYY: 해당 연도 | YYYY-MM: 해당 월
+        </p>
       </div>
 
       {/* R2 폴더 */}

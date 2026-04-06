@@ -1,9 +1,13 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import type { ParsedItem, ToastTone, LogTone } from "../types";
 import { buildItemsWithChannel } from "../utils/r2";
-import { parseRss } from "../utils/rss";
 import { buildSqlText, parseSqlToRows } from "../utils/sql";
+import {
+  parseRss,
+  parseDateFilter,
+  filterItemsByDateFilter,
+} from "../utils/rss";
 import type { ProcessTone } from "./useProcessLog";
 
 interface UseEpisodeFetchOptions {
@@ -34,52 +38,68 @@ export function useEpisodeFetch({
   const [isSending, setIsSending] = useState(false);
   const [insertResult, setInsertResult] = useState("");
 
-  const parseProgramId = (programId: string) => {
+  const parseProgramId = useCallback((programId: string) => {
     const trimmedProgramId = programId.trim();
     const parsedProgramId = trimmedProgramId ? Number(trimmedProgramId) : null;
     return parsedProgramId !== null && Number.isFinite(parsedProgramId)
       ? parsedProgramId
       : null;
-  };
+  }, []);
 
-  const buildSqlPreviewFromItems = (
-    sourceItems: ParsedItem[],
-    programId: string,
-    overrideChannel?: string,
-  ) => {
-    const normalizedItems = sourceItems.map((item) => ({
-      ...item,
-      duration: item._editingDurationValue ?? item.duration,
-    }));
+  const buildSqlPreviewFromItems = useCallback(
+    (
+      sourceItems: ParsedItem[],
+      programId: string,
+      overrideChannel?: string,
+    ) => {
+      const normalizedItems = sourceItems.map((item) => ({
+        ...item,
+        duration: item._editingDurationValue ?? item.duration,
+      }));
 
-    const effectiveChannel =
-      (overrideChannel ?? channelOverride).trim() || channelTitle;
+      const effectiveChannel =
+        (overrideChannel ?? channelOverride).trim() || channelTitle;
 
-    const itemsWithExt = normalizedItems.map((item) => ({
-      ...item,
-      audioUrl: item.audioUrl.startsWith("blob:")
-        ? `placeholder.${item.filename.split(".").pop() || "m4a"}`
-        : item.audioUrl,
-    }));
+      const itemsWithExt = normalizedItems.map((item) => ({
+        ...item,
+        audioUrl: item.audioUrl.startsWith("blob:")
+          ? `placeholder.${item.filename.split(".").pop() || "m4a"}`
+          : item.audioUrl,
+      }));
 
-    const rebuilt = buildItemsWithChannel(
-      itemsWithExt,
-      effectiveChannel,
-      r2Folder,
-    ).map((item, index) => ({
-      ...item,
-      audioUrl: normalizedItems[index].audioUrl,
-      duration: normalizedItems[index].duration,
-    }));
+      const rebuilt = buildItemsWithChannel(
+        itemsWithExt,
+        effectiveChannel,
+        r2Folder,
+      ).map((item, index) => ({
+        ...item,
+        audioUrl: normalizedItems[index].audioUrl,
+        duration: normalizedItems[index].duration,
+      }));
 
-    const programNumber = parseProgramId(programId);
-    return buildSqlText(rebuilt, programNumber, language);
-  };
+      const programNumber = parseProgramId(programId);
+      return buildSqlText(rebuilt, programNumber, language);
+    },
+    [channelOverride, channelTitle, r2Folder, parseProgramId, language],
+  );
 
-  const syncSqlPreview = (programId: string, overrideChannel?: string) => {
-    if (!items.length) return;
-    setSqlText(buildSqlPreviewFromItems(items, programId, overrideChannel));
-  };
+  const syncSqlPreview = useCallback(
+    (
+      programId: string,
+      overrideChannel?: string,
+      sourceItems?: ParsedItem[],
+    ) => {
+      const targetItems = sourceItems ?? items;
+      if (!targetItems.length) {
+        setSqlText("");
+        return;
+      }
+      setSqlText(
+        buildSqlPreviewFromItems(targetItems, programId, overrideChannel),
+      );
+    },
+    [items, buildSqlPreviewFromItems],
+  );
 
   const formatInsertError = (insertError: unknown) => {
     if (!insertError || typeof insertError !== "object") {
@@ -145,32 +165,46 @@ export function useEpisodeFetch({
       setProcess("RSS 파싱 중", "working");
       addLog("RSS 수신 완료. 파싱 중...", "info");
 
-      const limitNumber = Math.max(1, Number(limit) || 1);
+      const dateFilter = parseDateFilter(limit);
+      const fetchLimit = dateFilter.type === "count" ? dateFilter.value : 100;
       const programNumber = parseProgramId(programId);
       const parsed = parseRss(
         xmlText,
-        limitNumber,
+        fetchLimit,
         programNumber,
         language,
         r2Folder,
       );
 
+      const filteredItems = filterItemsByDateFilter(parsed.items, dateFilter);
+      const filteredSqlText = buildSqlText(
+        filteredItems,
+        programNumber,
+        language,
+      );
+
       setChannelTitle(parsed.channelTitle);
       setChannelOverride(parsed.channelTitle);
-      setItems(parsed.items);
-      setSqlText(parsed.sqlText);
-      setOriginalSqlText(parsed.sqlText);
-      setOriginalItems(parsed.items);
+      setItems(filteredItems);
+      setSqlText(filteredSqlText);
+      setOriginalSqlText(filteredSqlText);
+      setOriginalItems(filteredItems);
       setOriginalChannelTitle(parsed.channelTitle);
 
+      const filterDesc =
+        dateFilter.type === "count"
+          ? `최신 ${dateFilter.value}개`
+          : dateFilter.type === "year"
+            ? `${dateFilter.year}년`
+            : `${dateFilter.year}년 ${String(dateFilter.month).padStart(2, "0")}월`;
       addLog(
-        `'${parsed.channelTitle}' ${parsed.items.length}개 항목 파싱 완료.`,
+        `'${parsed.channelTitle}' (${filterDesc}) ${filteredItems.length}개 항목 파싱 완료.`,
         "success",
       );
       addLog("SQL 생성 완료.", "success");
       setProcess("SQL 생성 완료", "success");
 
-      return parsed.items;
+      return filteredItems;
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "알 수 없는 오류입니다.";
@@ -193,15 +227,34 @@ export function useEpisodeFetch({
   };
 
   /** SQL 텍스트를 파싱해서 Supabase episodes 테이블에 insert */
-  const insertToSupabase = async () => {
-    if (!sqlText.trim()) return;
+  const insertToSupabase = async (
+    targetItems?: ParsedItem[],
+    programId = "",
+  ) => {
+    const sqlSource =
+      targetItems && targetItems.length > 0
+        ? buildSqlPreviewFromItems(targetItems, programId)
+        : sqlText;
+
+    if (!sqlSource.trim()) return;
     setError("");
     setStatus("");
     setIsSending(true);
 
     try {
       setProcess("Supabase 전송 중", "working");
-      const rowsToInsert = parseSqlToRows(sqlText);
+      const rowsToInsert = parseSqlToRows(sqlSource);
+
+      if (!rowsToInsert.length) {
+        const message =
+          "전송할 에피소드가 없습니다. 항목을 선택한 뒤 다시 시도해주세요.";
+        setError(message);
+        addLog(`Supabase 전송 실패: ${message}`, "error");
+        setProcess("Supabase 전송 실패", "error");
+        setInsertResult("failed");
+        return;
+      }
+
       addLog(`Supabase에 ${rowsToInsert.length}개 항목 전송 중...`, "action");
 
       // FK 오류를 사용자 친화적으로 안내하기 위해 사전 검증

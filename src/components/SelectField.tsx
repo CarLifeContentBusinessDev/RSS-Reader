@@ -17,6 +17,7 @@ const SelectField = ({
   className,
 }: SelectFieldProps) => {
   const [open, setOpen] = useState(false);
+  const hasLabel = label.trim().length > 0;
   const labelId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const selected =
@@ -46,10 +47,14 @@ const SelectField = ({
   }, []);
 
   return (
-    <div className={`grid gap-2 font-semibold ${className ?? ""}`}>
-      <span id={labelId} className="text-[0.9rem] text-ink-muted">
-        {label}
-      </span>
+    <div
+      className={`grid ${hasLabel ? "gap-2" : "gap-0"} font-semibold ${className ?? ""}`}
+    >
+      {hasLabel && (
+        <span id={labelId} className="text-[0.9rem] text-ink-muted">
+          {label}
+        </span>
+      )}
       <div className="relative" ref={wrapperRef}>
         <button
           className={`flex w-full items-center justify-between gap-3 rounded-xl border bg-surface px-3.5 py-3 text-base font-semibold text-ink transition focus:border-transparent focus:outline-none focus:ring-4 focus:ring-[rgba(242,201,76,0.25)] ${
@@ -58,7 +63,9 @@ const SelectField = ({
           type="button"
           aria-haspopup="listbox"
           aria-expanded={open}
-          aria-labelledby={labelId}
+          {...(hasLabel
+            ? { "aria-labelledby": labelId }
+            : { "aria-label": "선택" })}
           onClick={() => setOpen((prev) => !prev)}
         >
           <span>{selected?.label ?? value}</span>

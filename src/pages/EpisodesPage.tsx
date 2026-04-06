@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { EpisodeInfoEditor } from "../components/EpisodeInfoEditor";
 import { EpisodesFetchForm } from "../components/EpisodesFetchForm";
 import { EpisodeSqlEditor } from "../components/EpisodeSqlEditor";
@@ -45,6 +45,9 @@ const loadEpisodesSnapshot = (): EpisodesFormSnapshot => {
   }
 };
 
+const getEpisodeSelectionKey = (filename: string) =>
+  filename.replace(/\.(mp3|m4a)$/i, "");
+
 interface EpisodesPageProps {
   authUserEmail: string | null;
   onRequireLogin: () => void;
@@ -79,6 +82,9 @@ const EpisodesPage = ({
   const [autoSendToSupabase, setAutoSendToSupabase] = useState(
     Boolean(savedSnapshot.autoSendToSupabase),
   );
+  const [deselectedEpisodeKeys, setDeselectedEpisodeKeys] = useState<
+    Set<string>
+  >(new Set());
   const [uploadResult, setUploadResult] = useState("");
   const restoredProgramId = useRef(false);
 
@@ -126,7 +132,6 @@ const EpisodesPage = ({
     setInsertResult,
     fetchEpisodes,
     insertToSupabase,
-    applyChanges,
     resetToOriginal,
     startEditDuration,
     updateEditingDuration,
@@ -199,15 +204,27 @@ const EpisodesPage = ({
     autoSendToSupabase,
   ]);
 
-  useEffect(() => {
-    if (!items.length) return;
-    syncSqlPreview(programId);
-  }, [items, channelOverride, r2Folder, programId, syncSqlPreview]);
+  const selectedItems = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          !deselectedEpisodeKeys.has(getEpisodeSelectionKey(item.filename)),
+      ),
+    [items, deselectedEpisodeKeys],
+  );
 
-  const convertSummary = getConvertSummary(items);
-  const uploadSummary = getUploadSummary(items);
-  const allConverted = isAllConverted(items);
-  const allUploaded = isAllUploaded(items);
+  useEffect(() => {
+    syncSqlPreview(programId, undefined, selectedItems);
+  }, [selectedItems, channelOverride, r2Folder, programId, syncSqlPreview]);
+  const selectedItemCount = selectedItems.length;
+  const isAllSelected = items.length > 0 && selectedItemCount === items.length;
+
+  const convertSummary = getConvertSummary(selectedItems);
+  const uploadSummary = getUploadSummary(selectedItems);
+  const allConverted = isAllConverted(selectedItems);
+  const allUploaded = isAllUploaded(selectedItems);
+  const allConvertedForAutomation = isAllConverted(items);
+  const allUploadedForAutomation = isAllUploaded(items);
 
   const isConverting = Object.values(convertStates).some(
     (s) => s.status === "converting",
@@ -218,6 +235,29 @@ const EpisodesPage = ({
   const isAllAutomationSelected =
     autoConvertAudio && autoUploadToR2 && autoSendToSupabase;
 
+  const handleEpisodeSelectionChange = useCallback(
+    (filename: string, selected: boolean) => {
+      const key = getEpisodeSelectionKey(filename);
+      setDeselectedEpisodeKeys((prev) => {
+        const next = new Set(prev);
+        if (selected) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleSelectAllEpisodes = useCallback(() => {
+    setDeselectedEpisodeKeys(new Set());
+  }, []);
+
+  const handleClearSelectedEpisodes = useCallback(() => {
+    setDeselectedEpisodeKeys(
+      new Set(items.map((item) => getEpisodeSelectionKey(item.filename))),
+    );
+  }, [items]);
+
   // RSS 파싱 → 선택적 자동 변환/업로드/전송
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -226,6 +266,7 @@ const EpisodesPage = ({
       resetConvertStates();
       setUploadResult("");
       setInsertResult("");
+      setDeselectedEpisodeKeys(new Set());
 
       const parsedItems = await fetchEpisodes(rssUrl, programId, limit);
       if (!parsedItems?.length) return;
@@ -237,28 +278,37 @@ const EpisodesPage = ({
 
   const handleInsert = useCallback(() => {
     guard(MESSAGES.LOGIN_REQUIRED_SEND, () => {
-      // 채널명, R2폴더 변경사항 반영 후 전송
-      if (items.length > 0) {
-        applyChanges(programId);
+      if (!selectedItems.length) {
+        showToast("전송할 에피소드를 먼저 선택해주세요.", "info");
+        return;
       }
-      insertToSupabase();
+      insertToSupabase(selectedItems, programId);
     });
-  }, [guard, insertToSupabase, items, programId, applyChanges]);
+  }, [guard, insertToSupabase, programId, selectedItems, showToast]);
 
   // 수동 재변환
   const handleConvertAll = () => {
     guard(MESSAGES.LOGIN_REQUIRED_FETCH, async () => {
-      await convertAll(items);
+      if (!selectedItems.length) {
+        showToast("변환할 에피소드를 먼저 선택해주세요.", "info");
+        return;
+      }
+      await convertAll(selectedItems);
     });
   };
 
   // R2 업로드 → R2 URL로 교체 + SQL 재생성
   const handleUploadAll = useCallback(async () => {
     guard(MESSAGES.LOGIN_REQUIRED_SEND, async () => {
+      if (!selectedItems.length) {
+        showToast("업로드할 에피소드를 먼저 선택해주세요.", "info");
+        return;
+      }
+
       setUploadResult("working");
       const effectiveChannel = channelOverride || channelTitle;
       const { urlMap, hasError } = await uploadAll(
-        items,
+        selectedItems,
         convertStates,
         r2Folder,
         effectiveChannel,
@@ -272,19 +322,20 @@ const EpisodesPage = ({
     guard,
     channelOverride,
     channelTitle,
-    items,
+    selectedItems,
     convertStates,
     r2Folder,
     uploadAll,
     applyAudioUrls,
     programId,
+    showToast,
   ]);
 
   // 자동 R2 업로드 (변환 완료 후)
   useEffect(() => {
     if (
       autoUploadToR2 &&
-      allConverted &&
+      allConvertedForAutomation &&
       !isUploading &&
       items.length > 0 &&
       !isLoading &&
@@ -294,7 +345,7 @@ const EpisodesPage = ({
     }
   }, [
     autoUploadToR2,
-    allConverted,
+    allConvertedForAutomation,
     isUploading,
     items.length,
     isLoading,
@@ -306,7 +357,7 @@ const EpisodesPage = ({
   useEffect(() => {
     if (
       autoSendToSupabase &&
-      allUploaded &&
+      allUploadedForAutomation &&
       !isSending &&
       items.length > 0 &&
       !insertResult
@@ -315,7 +366,7 @@ const EpisodesPage = ({
     }
   }, [
     autoSendToSupabase,
-    allUploaded,
+    allUploadedForAutomation,
     isSending,
     items.length,
     insertResult,
@@ -332,6 +383,7 @@ const EpisodesPage = ({
     setAutoConvertAudio(false);
     setAutoUploadToR2(false);
     setAutoSendToSupabase(false);
+    setDeselectedEpisodeKeys(new Set());
     setUploadResult("");
     setInsertResult("");
     resetConvertStates();
@@ -411,27 +463,23 @@ const EpisodesPage = ({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <a
+              className={ghostButtonClass}
+              href={`https://dash.cloudflare.com/194031f1919f524b4ecbf1ad3c5f60f9/r2/default/buckets/pickle-demo?prefix=${encodeURIComponent(
+                r2Folder.replace(/^\/+/, ""),
+              )}%2F${encodeURIComponent(channelOverride || channelTitle)}%2F`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              폴더 바로가기
+            </a>
             <button
               className={ghostButtonClass}
-              onClick={handleConvertAll}
-              disabled={!items.length || isConverting || isLoading}
+              type="button"
+              onClick={resetToOriginal}
+              disabled={!originalItems.length}
             >
-              {isConverting
-                ? `변환 중... (${convertSummary.completed}/${convertSummary.total})`
-                : allConverted
-                  ? "재변환"
-                  : "m4a 변환"}
-            </button>
-            <button
-              className={ghostButtonClass}
-              onClick={handleUploadAll}
-              disabled={!allConverted || isUploading}
-            >
-              {isUploading
-                ? `업로드 중... (${uploadSummary.completed}/${uploadSummary.total})`
-                : allUploaded
-                  ? "재업로드"
-                  : "R2 업로드"}
+              원래대로
             </button>
           </div>
         </div>
@@ -450,6 +498,9 @@ const EpisodesPage = ({
               convertSummary={convertSummary}
               uploadStates={uploadStates}
               uploadSummary={uploadSummary}
+              selectedCount={selectedItemCount}
+              totalCount={items.length}
+              isAllSelected={isAllSelected}
               sqlText={sqlText}
               isSending={isSending}
               onDownload={downloadFile}
@@ -457,8 +508,34 @@ const EpisodesPage = ({
               onUpdateEditingDuration={updateEditingDuration}
               onConfirmEditDuration={confirmEditDuration}
               onCancelEditDuration={cancelEditDuration}
-              r2Folder={r2Folder}
-              onResetToOriginal={resetToOriginal}
+              isEpisodeSelected={(filename) =>
+                !deselectedEpisodeKeys.has(getEpisodeSelectionKey(filename))
+              }
+              onEpisodeSelectionChange={handleEpisodeSelectionChange}
+              onSelectAllEpisodes={handleSelectAllEpisodes}
+              onClearSelectedEpisodes={handleClearSelectedEpisodes}
+              onConvertAll={handleConvertAll}
+              onUploadAll={handleUploadAll}
+              isConvertDisabled={
+                !selectedItems.length || isConverting || isLoading
+              }
+              isUploadDisabled={
+                !selectedItems.length || !allConverted || isUploading
+              }
+              convertButtonLabel={
+                isConverting
+                  ? `변환 중... (${convertSummary.completed}/${convertSummary.total})`
+                  : allConverted
+                    ? "재변환"
+                    : "m4a 변환"
+              }
+              uploadButtonLabel={
+                isUploading
+                  ? `업로드 중... (${uploadSummary.completed}/${uploadSummary.total})`
+                  : allUploaded
+                    ? "재업로드"
+                    : "R2 업로드"
+              }
               onSendToSupabase={handleInsert}
             />
             <EpisodeSqlEditor
