@@ -12,25 +12,7 @@ const ANSI = {
 const colorize = (message: string, color: keyof typeof ANSI) =>
   `${ANSI[color]}${message}${ANSI.reset}`;
 
-interface RequestWithBody extends IncomingMessage {
-  body?: {
-    folder?: string;
-    filename?: string;
-    file?: string; // base64
-    logContext?: {
-      channelName?: string;
-      episodeTitle?: string;
-      programId?: number;
-      episodeId?: number;
-      programIndex?: number;
-      programTotal?: number;
-      episodeIndex?: number;
-      episodeTotal?: number;
-    };
-  };
-}
-
-const buildLogPrefix = (logContext?: {
+type LogContext = {
   channelName?: string;
   episodeTitle?: string;
   programId?: number;
@@ -39,7 +21,26 @@ const buildLogPrefix = (logContext?: {
   programTotal?: number;
   episodeIndex?: number;
   episodeTotal?: number;
-}) => {
+};
+
+interface RequestWithBody extends IncomingMessage {
+  body?: {
+    folder?: string;
+    filename?: string;
+    file?: string; // base64
+    logContext?: LogContext;
+  };
+}
+
+const toLogContext = (value: unknown): LogContext | undefined => {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  return value as LogContext;
+};
+
+const buildLogPrefix = (logContext?: LogContext) => {
   const p =
     logContext?.programIndex && logContext?.programTotal
       ? `[P ${String(logContext.programIndex)}/${String(logContext.programTotal)}]`
@@ -103,7 +104,12 @@ export default async function handler(
     req.on("end", resolve);
   });
 
-  let parsedBody: { folder?: string; filename?: string; file?: string; logContext?: unknown };
+  let parsedBody: {
+    folder?: string;
+    filename?: string;
+    file?: string;
+    logContext?: unknown;
+  };
   try {
     parsedBody = JSON.parse(rawBody);
   } catch {
@@ -144,7 +150,7 @@ export default async function handler(
     key = filename;
   }
 
-  const contextPrefix = buildLogPrefix(logContext);
+  const contextPrefix = buildLogPrefix(toLogContext(logContext));
 
   try {
     await s3.send(
