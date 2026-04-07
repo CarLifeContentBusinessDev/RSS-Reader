@@ -49,7 +49,7 @@ const GUIDE_STEPS = [
 ];
 
 const normalizeFolder = (folder: string) =>
-  folder.trim().replace(/^\/+/, "").replace(/\/+$/g, "");
+  folder.trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/g, "");
 
 const baseNameToM4a = (name: string) => {
   if (!name.trim()) return "output.m4a";
@@ -134,9 +134,9 @@ const AudioConvertPage = ({
   };
 
   const handleApplyDefaultFolder = () => {
-    const normalized = normalizeFolder(defaultFolder);
-    setRows((prev) => prev.map((row) => ({ ...row, folder: normalized })));
-    addLog(`기본 경로 일괄 적용: ${normalized}`, "info");
+    const nextFolder = defaultFolder.trim();
+    setRows((prev) => prev.map((row) => ({ ...row, folder: nextFolder })));
+    addLog(`기본 경로 일괄 적용: ${nextFolder}`, "info");
   };
 
   const handleRemoveRow = (id: string) => {
@@ -320,7 +320,7 @@ const AudioConvertPage = ({
                         value={row.folder}
                         onChange={(event) =>
                           updateRow(row.id, {
-                            folder: normalizeFolder(event.target.value),
+                            folder: event.target.value,
                           })
                         }
                         disabled={isSubmitting}

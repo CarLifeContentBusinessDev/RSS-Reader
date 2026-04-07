@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
+import ffprobeInstaller from "@ffprobe-installer/ffprobe";
 import ffmpeg from "fluent-ffmpeg";
 
 // m4a(ipod) 컨테이너는 mp3 오디오 스트림 copy를 지원하지 않는다.
@@ -50,6 +51,7 @@ const buildLogPrefix = (logContext?: {
 
 // Vercel 환경에서 ffmpeg 바이너리 경로 설정
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+ffmpeg.setFfprobePath(ffprobeInstaller.path);
 
 const getSourceAudioCodec = async (filePath: string) => {
   const probeData = await new Promise<ffmpeg.FfprobeData>((resolve, reject) => {

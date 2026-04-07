@@ -766,13 +766,13 @@ const AudioRemappingPage = ({
   const isRangeInvalid =
     excelEndRow !== undefined && excelEndRow < (excelStartRow ?? 4);
 
-  // 파일/시트 변경 시에만 재파싱 (range 변경은 onChange에서 scheduleParse로 직접 처리)
+  // 파일/시트/범위 변경 시 재파싱
   useEffect(() => {
     if (excelFile && selectedSheet) {
       const startRow = excelStartRow ?? 4;
       scheduleParse(excelFile, selectedSheet, startRow, excelEndRow);
     }
-  }, [excelFile, selectedSheet]);
+  }, [excelFile, selectedSheet, excelStartRow, excelEndRow, scheduleParse]);
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -907,14 +907,6 @@ const AudioRemappingPage = ({
                       : undefined;
                     setExcelStartRow(newStart);
                     setIsAllRows(false);
-                    if (excelFile && selectedSheet) {
-                      scheduleParse(
-                        excelFile,
-                        selectedSheet,
-                        newStart ?? 4,
-                        excelEndRow,
-                      );
-                    }
                   }}
                   className={inputClass + " w-24"}
                   placeholder="4"
@@ -931,14 +923,6 @@ const AudioRemappingPage = ({
                       : undefined;
                     setExcelEndRow(newEnd);
                     setIsAllRows(false);
-                    if (excelFile && selectedSheet) {
-                      scheduleParse(
-                        excelFile,
-                        selectedSheet,
-                        excelStartRow ?? 4,
-                        newEnd,
-                      );
-                    }
                   }}
                   className={inputClass + " w-24"}
                   placeholder={

@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
+import ffprobeInstaller from "@ffprobe-installer/ffprobe";
 import ffmpeg from "fluent-ffmpeg";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
@@ -52,6 +53,7 @@ const buildLogPrefix = (logContext?: {
 };
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+ffmpeg.setFfprobePath(ffprobeInstaller.path);
 
 const getSourceAudioCodec = async (filePath: string) => {
   const probeData = await new Promise<ffmpeg.FfprobeData>((resolve, reject) => {
