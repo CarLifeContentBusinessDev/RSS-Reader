@@ -30,6 +30,28 @@ function toErrorMessage(err: unknown, fallback = "오류 발생"): string {
   return fallback;
 }
 
+type CountryCode = "KR" | "US" | "JP" | "GB" | "DE";
+
+function mapLanguageToCountry(languageCode: string): CountryCode {
+  const normalized = languageCode.toLowerCase();
+  const countryMap: Record<string, CountryCode> = {
+    ko: "KR",
+    en: "US",
+    jp: "JP",
+    uk: "GB",
+    de: "DE",
+  };
+
+  const mapped = countryMap[normalized];
+  if (!mapped) {
+    throw new Error(
+      `지원하지 않는 language입니다: ${languageCode} (가능: ko, en, jp, uk, de)`,
+    );
+  }
+
+  return mapped;
+}
+
 interface UseProgramFetchOptions {
   language: string;
   imageFolder: string;
@@ -143,6 +165,35 @@ export function useProgramFetch({
         .insert(rowsToInsert)
         .select("id");
       if (insertError) throw insertError;
+
+      const categoryRows = rowsToInsert
+        .map((row, index) => {
+          if (!row.category_id) return null;
+
+          const programId = data?.[index]?.id;
+          if (!programId) {
+            throw new Error(
+              "program_id를 확인할 수 없어 categories 매핑에 실패했습니다.",
+            );
+          }
+
+          const rowLanguage = row.language?.[0] ?? language;
+          return {
+            category_id: row.category_id,
+            program_id: programId,
+            language: rowLanguage.toLowerCase(),
+            country: mapLanguageToCountry(rowLanguage),
+          };
+        })
+        .filter((row) => row !== null);
+
+      if (categoryRows.length) {
+        const { error: categoryInsertError } = await supabase
+          .from("programs_categories")
+          .insert(categoryRows);
+
+        if (categoryInsertError) throw categoryInsertError;
+      }
 
       addLog("Supabase insert 완료.", "success");
       if (data?.length) {

@@ -31,34 +31,137 @@ export const parseSqlToRows = (sqlText: string): EpisodeRow[] => {
 };
 
 export const parseProgramSqlToRows = (sqlText: string): ProgramRow[] => {
-  const rowPattern =
-    /\(\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*'((?:''|[^'])*)'\s*,\s*ARRAY\[\s*'((?:''|[^'])*)'\s*\](?:\s*,\s*(\d+|NULL))?(?:\s*,\s*(\d+|NULL))?\s*\)/g;
+  const unquoteSqlString = (value: string) => {
+    const trimmed = value.trim();
+    const withoutCast = trimmed.replace(/::[^\s,]+$/, "");
+    if (!withoutCast.startsWith("'") || !withoutCast.endsWith("'")) {
+      throw new Error(`문자열 필드 형식이 올바르지 않습니다: ${value}`);
+    }
+    return withoutCast.slice(1, -1).replace(/''/g, "'");
+  };
+
+  const parseLanguageArray = (value: string) => {
+    const trimmed = value.trim();
+    const arrayMatch = trimmed.match(
+      /^ARRAY\s*\[\s*'((?:''|[^'])*)'\s*\](?:::[^\s,]+)?$/i,
+    );
+    if (arrayMatch) {
+      return [arrayMatch[1].replace(/''/g, "'")];
+    }
+
+    const pgArrayMatch = trimmed.match(/^'\{\s*([^{}]+?)\s*\}'$/);
+    if (pgArrayMatch) {
+      return [pgArrayMatch[1].replace(/^"|"$/g, "")];
+    }
+
+    throw new Error(`language 배열 필드 형식이 올바르지 않습니다: ${value}`);
+  };
+
+  const parseOptionalNumber = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed || /^NULL$/i.test(trimmed)) return undefined;
+    const num = Number(trimmed);
+    if (!Number.isFinite(num)) {
+      throw new Error(`숫자 필드 형식이 올바르지 않습니다: ${value}`);
+    }
+    return num;
+  };
+
+  const splitTupleFields = (tupleText: string) => {
+    const fields: string[] = [];
+    let inQuote = false;
+    let bracketDepth = 0;
+    let tokenStart = 0;
+
+    for (let i = 0; i < tupleText.length; i += 1) {
+      const ch = tupleText[i];
+      const next = tupleText[i + 1];
+
+      if (ch === "'" && inQuote && next === "'") {
+        i += 1;
+        continue;
+      }
+      if (ch === "'") {
+        inQuote = !inQuote;
+        continue;
+      }
+      if (!inQuote && ch === "[") {
+        bracketDepth += 1;
+        continue;
+      }
+      if (!inQuote && ch === "]") {
+        bracketDepth -= 1;
+        continue;
+      }
+      if (!inQuote && bracketDepth === 0 && ch === ",") {
+        fields.push(tupleText.slice(tokenStart, i).trim());
+        tokenStart = i + 1;
+      }
+    }
+
+    fields.push(tupleText.slice(tokenStart).trim());
+    return fields.filter((field) => field.length > 0);
+  };
+
+  const extractTuples = (text: string) => {
+    const tuples: string[] = [];
+    let inQuote = false;
+    let depth = 0;
+    let tupleStart = -1;
+
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i];
+      const next = text[i + 1];
+
+      if (ch === "'" && inQuote && next === "'") {
+        i += 1;
+        continue;
+      }
+      if (ch === "'") {
+        inQuote = !inQuote;
+        continue;
+      }
+      if (inQuote) continue;
+
+      if (ch === "(") {
+        if (depth === 0) tupleStart = i + 1;
+        depth += 1;
+        continue;
+      }
+
+      if (ch === ")") {
+        depth -= 1;
+        if (depth === 0 && tupleStart >= 0) {
+          tuples.push(text.slice(tupleStart, i));
+          tupleStart = -1;
+        }
+      }
+    }
+
+    return tuples;
+  };
+
+  const valuesSectionMatch = sqlText.match(/VALUES\s*([\s\S]*?);?\s*$/i);
+  const valuesSection = valuesSectionMatch ? valuesSectionMatch[1] : sqlText;
+  const tupleTexts = extractTuples(valuesSection);
   const rows: ProgramRow[] = [];
 
-  for (const match of sqlText.matchAll(rowPattern)) {
-    const [
-      ,
-      titleRaw,
-      subtitleRaw,
-      imgRaw,
-      typeRaw,
-      language,
-      categoryIdRaw,
-      broadcastingIdRaw,
-    ] = match;
+  for (const tupleText of tupleTexts) {
+    const fields = splitTupleFields(tupleText);
+    if (fields.length < 5) continue;
+
     const row: ProgramRow = {
-      title: titleRaw.replace(/''/g, "'"),
-      subtitle: subtitleRaw.replace(/''/g, "'"),
-      img_url: imgRaw.replace(/''/g, "'"),
-      type: typeRaw.replace(/''/g, "'"),
-      language: [language.replace(/''/g, "'")],
+      title: unquoteSqlString(fields[0]),
+      subtitle: unquoteSqlString(fields[1]),
+      img_url: unquoteSqlString(fields[2]),
+      type: unquoteSqlString(fields[3]),
+      language: parseLanguageArray(fields[4]),
     };
-    if (categoryIdRaw && categoryIdRaw !== "NULL") {
-      row.category_id = Number(categoryIdRaw);
-    }
-    if (broadcastingIdRaw && broadcastingIdRaw !== "NULL") {
-      row.broadcasting_id = Number(broadcastingIdRaw);
-    }
+
+    const categoryId = parseOptionalNumber(fields[5] ?? "NULL");
+    const broadcastingId = parseOptionalNumber(fields[6] ?? "NULL");
+    if (categoryId !== undefined) row.category_id = categoryId;
+    if (broadcastingId !== undefined) row.broadcasting_id = broadcastingId;
     rows.push(row);
   }
 
