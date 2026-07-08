@@ -70,15 +70,39 @@ export const EPISODE_GUIDE_STEPS = [
 
 export const AUDIO_REMAPPING_GUIDE_STEPS = [
   {
-    step: "🚨",
-    text: "local에서 작업 시 더 빠르게 진행 가능",
-  },
-  {
     step: "1",
     text: "엑셀 파일 업로드 - 시트와 적용 범위 입력",
   },
   {
     step: "2",
     text: "작업 시작 - 등록된 에피소드를 RSS에서 조회하여 일치하는 항목에 대해 오디오 변환 및 URL 업데이트",
+  },
+];
+
+export const EPISODE_BULK_GUIDE_STEPS = [
+  {
+    step: "1",
+    text: "엑셀 파일 업로드 - 시트, 적용 범위, 최신 몇 개까지 추가할지 입력",
+    details: ["프로그램 식별: program_id 우선, 없으면 채널명으로 매칭"],
+  },
+  {
+    step: "2",
+    text: "작업 시작 - 프로그램별 RSS에서 최신 에피소드를 조회해 변환/업로드 후 episodes 테이블에 추가",
+    details: ["이미 등록된(제목 일치) 에피소드는 자동으로 건너뜀"],
+  },
+];
+
+export const PROGRAM_BULK_GUIDE_STEPS = [
+  {
+    step: "1",
+    text: "엑셀 파일 업로드 - 시트와 적용 범위 입력 (RSS, type, 카테고리, 방송사 컬럼)",
+    details: [
+      "카테고리/방송사는 이름(title) 텍스트로 입력, language 기준 자동 매칭",
+    ],
+  },
+  {
+    step: "2",
+    text: "작업 시작 - RSS를 조회해 이미지 자동 압축/업로드 후 programs 테이블에 추가",
+    details: ["이미 등록된(제목 일치) 프로그램은 자동으로 건너뜀"],
   },
 ];

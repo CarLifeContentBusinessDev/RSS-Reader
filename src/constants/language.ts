@@ -5,6 +5,7 @@ export const LANGUAGE_OPTIONS = [
   { value: "jp", label: "jp (일본)" },
   { value: "in", label: "in (인도)" },
   { value: "uk", label: "uk (영국)" },
+  { value: "au", label: "au (호주)" },
   { value: "fr", label: "fr (프랑스)" },
   { value: "es", label: "es (스페인)" },
   { value: "it", label: "it (이탈리아)" },

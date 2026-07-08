@@ -8,7 +8,7 @@ import { buildProgramSqlText, parseProgramSqlToRows } from "../utils/sql";
 import { BASE_URL } from "../constants/options";
 
 // 이미지 URL에서 확장자 추출 (없으면 "webp")
-function extractExt(imgUrl: string): string {
+export function extractExt(imgUrl: string): string {
   const urlName = imgUrl.split("/").pop()?.split("?")[0] ?? "";
   const candidate = urlName.split(".").pop();
   return candidate && candidate.length <= 5 ? candidate : "webp";
@@ -32,7 +32,7 @@ function toErrorMessage(err: unknown, fallback = "오류 발생"): string {
 
 type CountryCode = "KR" | "US" | "JP" | "GB" | "DE";
 
-function mapLanguageToCountry(languageCode: string): CountryCode {
+export function mapLanguageToCountry(languageCode: string): CountryCode {
   const normalized = languageCode.toLowerCase();
   const countryMap: Record<string, CountryCode> = {
     ko: "KR",
@@ -166,33 +166,46 @@ export function useProgramFetch({
         .select("id");
       if (insertError) throw insertError;
 
-      const categoryRows = rowsToInsert
-        .map((row, index) => {
-          if (!row.category_id) return null;
+      // programs insert는 이미 성공했으므로, categories 매핑 실패가
+      // 전체 결과를 "실패"로 덮어쓰지 않도록 별도로 처리한다.
+      try {
+        const categoryRows = rowsToInsert
+          .map((row, index) => {
+            if (!row.category_id) return null;
 
-          const programId = data?.[index]?.id;
-          if (!programId) {
-            throw new Error(
-              "program_id를 확인할 수 없어 categories 매핑에 실패했습니다.",
-            );
-          }
+            const programId = data?.[index]?.id;
+            if (!programId) return null;
 
-          const rowLanguage = row.language?.[0] ?? language;
-          return {
-            category_id: row.category_id,
-            program_id: programId,
-            language: rowLanguage.toLowerCase(),
-            country: mapLanguageToCountry(rowLanguage),
-          };
-        })
-        .filter((row) => row !== null);
+            const rowLanguage = row.language?.[0] ?? language;
+            return {
+              category_id: row.category_id,
+              program_id: programId,
+              language: rowLanguage.toLowerCase(),
+              country: mapLanguageToCountry(rowLanguage),
+            };
+          })
+          .filter((row): row is NonNullable<typeof row> => row !== null);
 
-      if (categoryRows.length) {
-        const { error: categoryInsertError } = await supabase
-          .from("programs_categories")
-          .insert(categoryRows);
+        if (categoryRows.length) {
+          const { error: categoryInsertError } = await supabase
+            .from("programs_categories")
+            .insert(categoryRows);
 
-        if (categoryInsertError) throw categoryInsertError;
+          if (categoryInsertError) throw categoryInsertError;
+        }
+      } catch (categoryErr) {
+        const categoryMessage = toErrorMessage(
+          categoryErr,
+          "카테고리 매핑 실패",
+        );
+        addLog(
+          `⚠️ 프로그램은 추가됐지만 programs_categories 매핑에 실패했습니다: ${categoryMessage}`,
+          "error",
+        );
+        showToast(
+          `프로그램은 추가됐지만 카테고리 매핑에 실패했습니다: ${categoryMessage}`,
+          "error",
+        );
       }
 
       addLog("Supabase insert 완료.", "success");

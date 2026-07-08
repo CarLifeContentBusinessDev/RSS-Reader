@@ -5,6 +5,8 @@ import TopBar from "./components/TopBar";
 import { supabase } from "./lib/supabaseClient";
 import AudioConvertPage from "./pages/AudioConvertPage";
 import AudioRemappingPage from "./pages/AudioRemappingPage";
+import BulkEpisodeAddPage from "./pages/BulkEpisodeAddPage";
+import BulkProgramAddPage from "./pages/BulkProgramAddPage";
 import EpisodesPage from "./pages/EpisodesPage";
 import ProgramsPage from "./pages/ProgramsPage";
 import type { ToastTone } from "./types";
@@ -163,6 +165,32 @@ function App() {
                 showToast={showToast}
                 status=""
                 setStatus={() => {}}
+              />
+            }
+          />
+          <Route
+            path="/programs-bulk"
+            element={
+              <BulkProgramAddPage
+                authUserEmail={authUserEmail}
+                onRequireLogin={() => {
+                  setAuthError("");
+                  setShowAuthModal(true);
+                }}
+                showToast={showToast}
+              />
+            }
+          />
+          <Route
+            path="/episodes-bulk"
+            element={
+              <BulkEpisodeAddPage
+                authUserEmail={authUserEmail}
+                onRequireLogin={() => {
+                  setAuthError("");
+                  setShowAuthModal(true);
+                }}
+                showToast={showToast}
               />
             }
           />

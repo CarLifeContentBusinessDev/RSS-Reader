@@ -15,6 +15,16 @@ export const LABELS = {
       DESCRIPTION:
         "엑셀의 프로그램과 RSS정보를 이용해 에피소드의 오디오 파일을 재매핑합니다.",
     },
+    EPISODE_BULK: {
+      TITLE: "Episode Bulk Add",
+      DESCRIPTION:
+        "엑셀의 프로그램 목록을 기준으로 RSS 최신 에피소드를 일괄 변환/업로드/추가합니다.",
+    },
+    PROGRAM_BULK: {
+      TITLE: "Program Bulk Add",
+      DESCRIPTION:
+        "엑셀의 RSS 목록을 기준으로 프로그램 정보를 일괄로 조회하여 추가합니다.",
+    },
   },
 
   // 섹션 헤더
