@@ -94,10 +94,18 @@ const runM4aConvert = async (
         "-movflags +faststart", // 스트리밍/빠른 재생 최적화
       ]);
     } else {
-      command.audioCodec("aac").audioBitrate("320k").outputOptions([
-        "-movflags +faststart", // 스트리밍/빠른 재생 최적화
-        "-profile:a aac_low",
-      ]);
+      // 토크쇼/음성 콘텐츠 기준: 모노 + 22.05kHz + fast coder로 인코딩 속도를
+      // 최대한 확보한다 (Vercel Hobby maxDuration 300s 안에 긴 에피소드도 처리하기 위함).
+      command
+        .audioCodec("aac")
+        .audioBitrate("96k")
+        .audioChannels(1)
+        .audioFrequency(22050)
+        .outputOptions([
+          "-movflags +faststart", // 스트리밍/빠른 재생 최적화
+          "-profile:a aac_low",
+          "-aac_coder fast",
+        ]);
     }
 
     let lastProgressLog = 0;
