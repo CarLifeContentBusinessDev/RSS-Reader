@@ -98,12 +98,12 @@ const AudioRemappingPage = ({
     setProcess: () => {},
   });
 
-  const REQUIRED_COLUMNS = [
-    "현 데모 순위",
-    "program_id",
-    "rank",
-    "채널명",
-    "RSS",
+  const REQUIRED_COLUMNS: { key: string; label: string }[] = [
+    { key: "현 데모 순위", label: "현 데모 순위" },
+    { key: "program_id", label: "program_id" },
+    { key: "rank", label: "rank" },
+    { key: "채널명", label: "채널명" },
+    { key: "rss", label: "RSS" },
   ];
   const MAX_EPISODE_CONCURRENCY = import.meta.env.PROD ? 1 : 5;
 
@@ -270,7 +270,9 @@ const AudioRemappingPage = ({
         });
         if (rows.length === 0) return;
 
-        const currentHeader = rows[0].map((h) => String(h).trim());
+        const currentHeader = rows[0].map((h) =>
+          String(h).trim().toLowerCase(),
+        );
         setRawRows(rows);
 
         const finalEndRow = end ?? rows.length + 2;
@@ -393,7 +395,7 @@ const AudioRemappingPage = ({
         const row = sheetData[i];
         const rowLanguage = getRowLanguage(row, defaultLanguage);
         const channelName = String(row["채널명"] || "").trim();
-        const rssUrl = String(row["RSS"] || "").trim();
+        const rssUrl = String(row["rss"] || "").trim();
         const programIdx = i + 1;
         const programTotal = sheetData.length;
 
@@ -946,7 +948,7 @@ const AudioRemappingPage = ({
                     <tr>
                       {REQUIRED_COLUMNS.map((col) => (
                         <th
-                          key={col}
+                          key={col.key}
                           className="px-4 py-2 font-bold text-slate-700 bg-slate-100 border-b border-slate-200 text-left"
                           style={{
                             position: "sticky",
@@ -954,7 +956,7 @@ const AudioRemappingPage = ({
                             background: "#f8fafc",
                           }}
                         >
-                          {col}
+                          {col.label}
                         </th>
                       ))}
                     </tr>
@@ -971,7 +973,7 @@ const AudioRemappingPage = ({
                       >
                         {REQUIRED_COLUMNS.map((col) => (
                           <td
-                            key={col}
+                            key={col.key}
                             className="px-4 py-2 text-slate-800 border-r border-slate-100 group-last:border-r-0 group-hover:bg-yellow-50"
                             style={{
                               maxWidth: 180,
@@ -979,9 +981,9 @@ const AudioRemappingPage = ({
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                             }}
-                            title={String(row[col] || "")}
+                            title={String(row[col.key] || "")}
                           >
-                            {row[col]}
+                            {row[col.key]}
                           </td>
                         ))}
                       </tr>

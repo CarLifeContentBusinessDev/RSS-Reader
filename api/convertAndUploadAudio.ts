@@ -212,7 +212,7 @@ export default async function handler(
   }
 
   const contextPrefix = buildLogPrefix(logContext);
-  cleanupStaleTmpDirs("audio-");
+  cleanupStaleTmpDirs("audio-", contextPrefix);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "audio-"));
   const sourceExt = originalFilename
     ? path.extname(originalFilename).toLowerCase() || ".mp3"

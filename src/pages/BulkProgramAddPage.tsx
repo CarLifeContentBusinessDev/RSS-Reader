@@ -216,7 +216,7 @@ const BulkProgramAddPage = ({
         });
         if (rows.length === 0) return;
 
-        const currentHeader = rows[0].map((h) => String(h).trim());
+        const currentHeader = rows[0].map((h) => String(h).trim().toLowerCase());
         setRawRows(rows);
 
         const finalEndRow = end ?? rows.length + offset;

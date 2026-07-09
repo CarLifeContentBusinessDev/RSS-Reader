@@ -21,7 +21,6 @@ import type { EpisodeRow, ParsedItem, ToastTone } from "../types";
 import { supabase } from "../lib/supabaseClient";
 import { parseRss } from "../utils/rss";
 
-// 타입 정의
 interface ExcelRow {
   [key: string]: string | number | undefined;
 }
@@ -68,7 +67,7 @@ const BulkEpisodeAddPage = ({
   const [selectedSheet, setSelectedSheet] = useState<string>("");
   const [selectedLanguage, setSelectedLanguage] =
     useState<string>(DEFAUKLT_LANGUAGE);
-  const [latestCount, setLatestCount] = useState<number>(5);
+  const [latestCount, setLatestCount] = useState<number>(4);
   const [sheetData, setSheetData] = useState<ExcelRow[]>([]);
   const [rawRows, setRawRows] = useState<string[][]>([]);
   const [excelStartRow, setExcelStartRow] = useState<number | undefined>(
@@ -85,7 +84,6 @@ const BulkEpisodeAddPage = ({
   const logsEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 실제 팀 공유 엑셀 템플릿 헤더명 (RSS 컬럼은 소문자 "rss"로 저장되어 있음)
   const REQUIRED_COLUMNS: { key: string; label: string }[] = [
     { key: "현 데모 순위", label: "현 데모 순위" },
     { key: "program_id", label: "program_id" },
@@ -229,7 +227,9 @@ const BulkEpisodeAddPage = ({
         });
         if (rows.length === 0) return;
 
-        const currentHeader = rows[0].map((h) => String(h).trim());
+        const currentHeader = rows[0].map((h) =>
+          String(h).trim().toLowerCase(),
+        );
         setRawRows(rows);
 
         const finalEndRow = end ?? rows.length + 2;
@@ -419,9 +419,7 @@ const BulkEpisodeAddPage = ({
             .eq("program_id", prog.id);
           if (epListErr) throw new Error("기존 에피소드 조회 실패");
           const existingTitleSet = new Set(
-            (existingEpisodes ?? []).map((ep: any) =>
-              normalizeTitle(ep.title),
-            ),
+            (existingEpisodes ?? []).map((ep: any) => normalizeTitle(ep.title)),
           );
 
           setProgress({

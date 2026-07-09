@@ -200,7 +200,7 @@ export default async function handler(
 
   const contextPrefix = buildLogPrefix(logContext);
 
-  cleanupStaleTmpDirs("audio-");
+  cleanupStaleTmpDirs("audio-", contextPrefix);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "audio-"));
   const mp3Path = path.join(tmpDir, "input.mp3");
   const m4aPath = path.join(tmpDir, "output.m4a");
