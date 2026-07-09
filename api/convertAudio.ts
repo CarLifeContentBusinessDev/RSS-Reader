@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import ffprobeInstaller from "@ffprobe-installer/ffprobe";
 import ffmpeg from "fluent-ffmpeg";
-import { cleanupStaleTmpDirs } from "./_lib/tmpCleanup";
+import { cleanupStaleTmpDirs } from "./_lib/tmpCleanup.js";
 
 // m4a(ipod) 컨테이너는 mp3 오디오 스트림 copy를 지원하지 않는다.
 const M4A_REMUX_CODECS = new Set(["aac", "alac"]);
