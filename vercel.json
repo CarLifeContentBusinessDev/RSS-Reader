@@ -2,12 +2,12 @@
   "buildCommand": "npm run build",
   "functions": {
     "api/convertAudio.ts": {
-      "maxDuration": 60,
+      "maxDuration": 300,
       "memory": 1024,
       "includeFiles": "node_modules/@ff{mpeg,probe}-installer/linux-x64/**"
     },
     "api/convertAndUploadAudio.ts": {
-      "maxDuration": 60,
+      "maxDuration": 300,
       "memory": 1024,
       "includeFiles": "node_modules/@ff{mpeg,probe}-installer/linux-x64/**"
     },

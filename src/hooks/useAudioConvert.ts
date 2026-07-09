@@ -106,7 +106,7 @@ export function useAudioConvert({
             // 504 Gateway Timeout 특별 처리
             if (res.status === 504) {
               throw new Error(
-                "변환 시간 초과 (10초 제한). 파일이 너무 큽니다.",
+                "변환 시간 초과 (함수 실행 제한 시간 초과). 파일이 너무 큽니다.",
               );
             }
             if (res.status === 413) {

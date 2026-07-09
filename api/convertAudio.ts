@@ -5,6 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import ffprobeInstaller from "@ffprobe-installer/ffprobe";
 import ffmpeg from "fluent-ffmpeg";
+import { cleanupStaleTmpDirs } from "./_lib/tmpCleanup";
 
 // m4a(ipod) 컨테이너는 mp3 오디오 스트림 copy를 지원하지 않는다.
 const M4A_REMUX_CODECS = new Set(["aac", "alac"]);
@@ -178,6 +179,7 @@ export default async function handler(
 
   const contextPrefix = buildLogPrefix(logContext);
 
+  cleanupStaleTmpDirs("audio-");
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "audio-"));
   const mp3Path = path.join(tmpDir, "input.mp3");
   const m4aPath = path.join(tmpDir, "output.m4a");
@@ -197,8 +199,9 @@ export default async function handler(
     const downloadTime = Date.now() - downloadStart;
 
     const sizeMB = arrayBuffer.byteLength / 1024 / 1024;
-    void sizeMB;
-    void downloadTime;
+    console.log(
+      `${contextPrefix} 다운로드 완료: ${sizeMB.toFixed(1)}MB, ${(downloadTime / 1000).toFixed(1)}s`,
+    );
 
     fs.writeFileSync(mp3Path, Buffer.from(arrayBuffer));
 
@@ -225,7 +228,9 @@ export default async function handler(
       await runM4aConvert(mp3Path, m4aPath, "aac");
     }
     const convertTime = Date.now() - convertStart;
-    void convertTime;
+    console.log(
+      `${contextPrefix} 변환 완료 (codec: ${sourceCodec ?? "unknown"}, remux: ${canRemuxWithoutReencode}): ${(convertTime / 1000).toFixed(1)}s`,
+    );
 
     let outputSize = fs.statSync(m4aPath).size;
     if (outputSize > MAX_BASE64_SAFE_BYTES) {

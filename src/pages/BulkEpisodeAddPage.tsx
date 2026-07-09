@@ -516,7 +516,7 @@ const BulkEpisodeAddPage = ({
                 programIndex: programIdx,
                 programTotal,
                 channelName: channelTitle,
-                stage: "오디오 변환 중",
+                stage: "변환 + 업로드 진행 중",
                 episodeIndex: episodeCompleted,
                 episodeTotal,
                 episodeTitle: epTitle,
@@ -546,63 +546,35 @@ const BulkEpisodeAddPage = ({
                 episodeTitle: epTitle,
               });
 
-              // 1단계: 오디오 변환
-              appendLog(`${stagePrefix} 🔄 오디오 변환 중`, "info");
-              const convertRes = await fetch("/api/convertAudio", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  url: item.audioUrl,
-                  filename: m4aFilename,
-                  logContext,
-                }),
-              });
+              // 변환 + R2 업로드 (서버에서 직접 처리, 브라우저 왕복 없음)
+              appendLog(`${stagePrefix} 🔄 변환 + 업로드 진행 중`, "info");
+              const convertUploadRes = await fetch(
+                "/api/convertAndUploadAudio",
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    url: item.audioUrl,
+                    filename: m4aFilename,
+                    folder,
+                    logContext,
+                  }),
+                },
+              );
 
-              if (!convertRes.ok) {
-                const errData = await convertRes.json().catch(() => ({
-                  error: `변환 실패 (${convertRes.status})`,
+              if (!convertUploadRes.ok) {
+                const errData = await convertUploadRes.json().catch(() => ({
+                  error: `변환/업로드 실패 (${convertUploadRes.status})`,
                 }));
                 throw new Error(
                   errData.details ||
                     errData.error ||
-                    `변환 실패 (${convertRes.status})`,
+                    `변환/업로드 실패 (${convertUploadRes.status})`,
                 );
               }
-              const { file: convertedFile } = await convertRes.json();
-              if (!convertedFile) throw new Error("변환 실패");
-              appendLog(`${stagePrefix} 변환 완료`, "info");
 
-              // 2단계: R2 업로드
-              setProgress({
-                programIndex: programIdx,
-                programTotal,
-                channelName: channelTitle,
-                stage: "업로드 진행 중",
-                episodeIndex: episodeCompleted,
-                episodeTotal,
-                episodeTitle: epTitle,
-              });
-              appendLog(`${stagePrefix} 🔄 업로드 진행 중`, "info");
-              const uploadRes = await fetch("/api/uploadAudio", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  folder,
-                  filename: m4aFilename,
-                  file: convertedFile,
-                  contentType: "audio/mp4",
-                }),
-              });
-
-              if (!uploadRes.ok) {
-                const errData = await uploadRes.json().catch(() => ({
-                  error: `업로드 실패 (${uploadRes.status})`,
-                }));
-                throw new Error(errData.error || `업로드 실패 (${uploadRes.status})`);
-              }
-
-              const { url: r2Url } = await uploadRes.json();
-              if (!r2Url) throw new Error("업로드 실패");
+              const { url: r2Url } = await convertUploadRes.json();
+              if (!r2Url) throw new Error("변환/업로드 실패");
 
               rowsToInsert.push({
                 title: epTitle,

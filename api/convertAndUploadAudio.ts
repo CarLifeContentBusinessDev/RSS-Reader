@@ -6,6 +6,7 @@ import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import ffprobeInstaller from "@ffprobe-installer/ffprobe";
 import ffmpeg from "fluent-ffmpeg";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { cleanupStaleTmpDirs } from "./_lib/tmpCleanup";
 
 // m4a(ipod) 컨테이너는 mp3 오디오 스트림 copy를 지원하지 않는다.
 const M4A_REMUX_CODECS = new Set(["aac", "alac"]);
@@ -190,6 +191,7 @@ export default async function handler(
   }
 
   const contextPrefix = buildLogPrefix(logContext);
+  cleanupStaleTmpDirs("audio-");
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "audio-"));
   const sourceExt = originalFilename
     ? path.extname(originalFilename).toLowerCase() || ".mp3"
@@ -199,6 +201,7 @@ export default async function handler(
 
   try {
     // 1. 오디오 입력 확보 (URL 또는 base64 파일)
+    const downloadStart = Date.now();
     if (file) {
       const inputBuffer = Buffer.from(file, "base64");
       fs.writeFileSync(inputPath, inputBuffer);
@@ -212,9 +215,14 @@ export default async function handler(
       }
       const arrayBuffer = await upstream.arrayBuffer();
       fs.writeFileSync(inputPath, Buffer.from(arrayBuffer));
+      const sizeMB = arrayBuffer.byteLength / 1024 / 1024;
+      console.log(
+        `${contextPrefix} 다운로드 완료: ${sizeMB.toFixed(1)}MB, ${((Date.now() - downloadStart) / 1000).toFixed(1)}s`,
+      );
     }
 
     // 2. m4a 변환
+    const convertStart = Date.now();
     const sourceCodec = await getSourceAudioCodec(inputPath);
     const canRemux = !!sourceCodec && M4A_REMUX_CODECS.has(sourceCodec);
 
@@ -234,6 +242,9 @@ export default async function handler(
     } else {
       await runM4aConvert(inputPath, m4aPath, "aac");
     }
+    console.log(
+      `${contextPrefix} 변환 완료 (codec: ${sourceCodec ?? "unknown"}, remux: ${canRemux}): ${((Date.now() - convertStart) / 1000).toFixed(1)}s`,
+    );
 
     // 3. R2 직접 업로드 (base64 변환 없음)
     const s3 = new S3Client({
