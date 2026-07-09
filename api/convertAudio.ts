@@ -68,13 +68,17 @@ const getSourceAudioCodec = async (filePath: string) => {
   const audioStream = probeData.streams.find(
     (stream) => stream.codec_type === "audio",
   );
-  return audioStream?.codec_name?.toLowerCase();
+  return {
+    codec: audioStream?.codec_name?.toLowerCase(),
+    durationSec: probeData.format.duration,
+  };
 };
 
 const runM4aConvert = async (
   inputPath: string,
   outputPath: string,
   mode: "copy" | "aac",
+  logPrefix?: string,
 ) => {
   await new Promise<void>((resolve, reject) => {
     if (fs.existsSync(outputPath)) {
@@ -96,12 +100,21 @@ const runM4aConvert = async (
       ]);
     }
 
+    let lastProgressLog = 0;
     command
       .on("stderr", (line) => {
         stderrLines.push(line);
         if (stderrLines.length > 80) {
           stderrLines.shift();
         }
+      })
+      .on("progress", (progress) => {
+        const now = Date.now();
+        if (now - lastProgressLog < 15000) return;
+        lastProgressLog = now;
+        console.log(
+          `${logPrefix ?? "[convertAudio]"} 인코딩 진행: ${progress.timemark ?? "?"} (${progress.percent ? progress.percent.toFixed(1) + "%" : "?"})`,
+        );
       })
       .on("end", () => resolve())
       .on("error", (err) => {
@@ -207,13 +220,17 @@ export default async function handler(
 
     // 가능한 코덱은 무재인코딩 리먹스, 그 외는 웹/앱 재생 호환성이 높은 AAC 인코딩
     const convertStart = Date.now();
-    const sourceCodec = await getSourceAudioCodec(mp3Path);
+    const { codec: sourceCodec, durationSec } =
+      await getSourceAudioCodec(mp3Path);
     const canRemuxWithoutReencode =
       !!sourceCodec && M4A_REMUX_CODECS.has(sourceCodec);
+    console.log(
+      `${contextPrefix} 원본 길이: ${durationSec ? (durationSec / 60).toFixed(1) + "분" : "?"}, codec: ${sourceCodec ?? "unknown"}`,
+    );
 
     if (canRemuxWithoutReencode) {
       try {
-        await runM4aConvert(mp3Path, m4aPath, "copy");
+        await runM4aConvert(mp3Path, m4aPath, "copy", contextPrefix);
       } catch (copyErr) {
         const copyMessage =
           copyErr instanceof Error ? copyErr.message : String(copyErr);
@@ -222,10 +239,10 @@ export default async function handler(
             `${contextPrefix} copy 변환 실패, AAC로 재시도: ${copyMessage}`,
           ),
         );
-        await runM4aConvert(mp3Path, m4aPath, "aac");
+        await runM4aConvert(mp3Path, m4aPath, "aac", contextPrefix);
       }
     } else {
-      await runM4aConvert(mp3Path, m4aPath, "aac");
+      await runM4aConvert(mp3Path, m4aPath, "aac", contextPrefix);
     }
     const convertTime = Date.now() - convertStart;
     console.log(
@@ -239,7 +256,7 @@ export default async function handler(
           `${contextPrefix} 무손실 결과가 너무 큼(${Math.round(outputSize / 1024 / 1024)}MB), AAC 320k로 재변환`,
         ),
       );
-      await runM4aConvert(mp3Path, m4aPath, "aac");
+      await runM4aConvert(mp3Path, m4aPath, "aac", contextPrefix);
       outputSize = fs.statSync(m4aPath).size;
     }
 

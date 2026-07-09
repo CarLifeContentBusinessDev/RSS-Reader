@@ -70,13 +70,17 @@ const getSourceAudioCodec = async (filePath: string) => {
   const audioStream = probeData.streams.find(
     (stream) => stream.codec_type === "audio",
   );
-  return audioStream?.codec_name?.toLowerCase();
+  return {
+    codec: audioStream?.codec_name?.toLowerCase(),
+    durationSec: probeData.format.duration,
+  };
 };
 
 const runM4aConvert = async (
   inputPath: string,
   outputPath: string,
   mode: "copy" | "aac",
+  logPrefix?: string,
 ) => {
   await new Promise<void>((resolve, reject) => {
     if (fs.existsSync(outputPath)) {
@@ -95,12 +99,21 @@ const runM4aConvert = async (
         .outputOptions(["-movflags +faststart", "-profile:a aac_low"]);
     }
 
+    let lastProgressLog = 0;
     command
       .on("stderr", (line) => {
         stderrLines.push(line);
         if (stderrLines.length > 80) {
           stderrLines.shift();
         }
+      })
+      .on("progress", (progress) => {
+        const now = Date.now();
+        if (now - lastProgressLog < 15000) return;
+        lastProgressLog = now;
+        console.log(
+          `${logPrefix ?? "[convertAndUploadAudio]"} 인코딩 진행: ${progress.timemark ?? "?"} (${progress.percent ? progress.percent.toFixed(1) + "%" : "?"})`,
+        );
       })
       .on("end", () => resolve())
       .on("error", (err) => {
@@ -223,12 +236,16 @@ export default async function handler(
 
     // 2. m4a 변환
     const convertStart = Date.now();
-    const sourceCodec = await getSourceAudioCodec(inputPath);
+    const { codec: sourceCodec, durationSec } =
+      await getSourceAudioCodec(inputPath);
     const canRemux = !!sourceCodec && M4A_REMUX_CODECS.has(sourceCodec);
+    console.log(
+      `${contextPrefix} 원본 길이: ${durationSec ? (durationSec / 60).toFixed(1) + "분" : "?"}, codec: ${sourceCodec ?? "unknown"}`,
+    );
 
     if (canRemux) {
       try {
-        await runM4aConvert(inputPath, m4aPath, "copy");
+        await runM4aConvert(inputPath, m4aPath, "copy", contextPrefix);
       } catch (copyErr) {
         const copyMessage =
           copyErr instanceof Error ? copyErr.message : String(copyErr);
@@ -237,10 +254,10 @@ export default async function handler(
             `${contextPrefix} copy 변환 실패, AAC로 재시도: ${copyMessage}`,
           ),
         );
-        await runM4aConvert(inputPath, m4aPath, "aac");
+        await runM4aConvert(inputPath, m4aPath, "aac", contextPrefix);
       }
     } else {
-      await runM4aConvert(inputPath, m4aPath, "aac");
+      await runM4aConvert(inputPath, m4aPath, "aac", contextPrefix);
     }
     console.log(
       `${contextPrefix} 변환 완료 (codec: ${sourceCodec ?? "unknown"}, remux: ${canRemux}): ${((Date.now() - convertStart) / 1000).toFixed(1)}s`,
