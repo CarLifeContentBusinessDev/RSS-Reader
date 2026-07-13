@@ -75,6 +75,10 @@ const BulkEpisodeAddPage = ({
   );
   const [excelEndRow, setExcelEndRow] = useState<number | undefined>(undefined);
   const [isAllRows, setIsAllRows] = useState(false);
+  const [rowSelectionMode, setRowSelectionMode] = useState<"range" | "list">(
+    "range",
+  );
+  const [excelRowListInput, setExcelRowListInput] = useState<string>("");
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasCompletedRun, setHasCompletedRun] = useState(false);
@@ -211,8 +215,25 @@ const BulkEpisodeAddPage = ({
 
   const parseDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  type RowSelection =
+    | { mode: "range"; start: number; end?: number }
+    | { mode: "list"; rows: number[] };
+
+  const parseRowListInput = (input: string): number[] => {
+    return Array.from(
+      new Set(
+        input
+          .split(/[,\s]+/)
+          .map((token) => token.trim())
+          .filter(Boolean)
+          .map((token) => Number(token))
+          .filter((n) => Number.isInteger(n) && n >= 4),
+      ),
+    ).sort((a, b) => a - b);
+  };
+
   const parseSheetData = useCallback(
-    (file: File, sheetName: string, start: number, end?: number) => {
+    (file: File, sheetName: string, selection: RowSelection) => {
       const reader = new FileReader();
       reader.onload = (evt) => {
         const data = evt.target?.result;
@@ -232,15 +253,26 @@ const BulkEpisodeAddPage = ({
         );
         setRawRows(rows);
 
-        const finalEndRow = end ?? rows.length + 2;
-
-        const dataRows = rows.slice(start - 3, finalEndRow - 2).map((row) => {
+        const buildRowObj = (row: string[]): ExcelRow => {
           const obj: ExcelRow = {};
           currentHeader.forEach((h, i) => {
             if (h) obj[h] = row[i];
           });
           return obj;
-        });
+        };
+
+        const dataRows =
+          selection.mode === "list"
+            ? selection.rows
+                .map((rowNum) => rows[rowNum - 3])
+                .filter((row): row is string[] => Boolean(row))
+                .map(buildRowObj)
+            : rows
+                .slice(
+                  selection.start - 3,
+                  (selection.end ?? rows.length + 2) - 2,
+                )
+                .map(buildRowObj);
         setSheetData([...dataRows]);
       };
       reader.readAsArrayBuffer(file);
@@ -249,11 +281,17 @@ const BulkEpisodeAddPage = ({
   );
 
   const scheduleParse = useCallback(
-    (file: File, sheet: string, start: number, end?: number) => {
+    (file: File, sheet: string, selection: RowSelection) => {
       if (parseDebounceRef.current) clearTimeout(parseDebounceRef.current);
-      if (end !== undefined && end < start) return;
+      if (
+        selection.mode === "range" &&
+        selection.end !== undefined &&
+        selection.end < selection.start
+      )
+        return;
+      if (selection.mode === "list" && selection.rows.length === 0) return;
       parseDebounceRef.current = setTimeout(() => {
-        parseSheetData(file, sheet, start, end);
+        parseSheetData(file, sheet, selection);
       }, 200);
     },
     [parseSheetData],
@@ -300,6 +338,8 @@ const BulkEpisodeAddPage = ({
         setSelectedLanguage((prev) =>
           detectLanguageFromSheetName(firstSheet, prev),
         );
+        setRowSelectionMode("range");
+        setExcelRowListInput("");
         updateRangeAutomatically(file, firstSheet);
       }
     };
@@ -310,6 +350,8 @@ const BulkEpisodeAddPage = ({
     setSelectedSheet(sheetName);
     setSelectedLanguage((prev) => detectLanguageFromSheetName(sheetName, prev));
     setIsAllRows(false);
+    setRowSelectionMode("range");
+    setExcelRowListInput("");
     if (excelFile) {
       updateRangeAutomatically(excelFile, sheetName);
     }
@@ -324,6 +366,8 @@ const BulkEpisodeAddPage = ({
     setExcelStartRow(undefined);
     setExcelEndRow(undefined);
     setIsAllRows(false);
+    setRowSelectionMode("range");
+    setExcelRowListInput("");
     setLogs([]);
     setProcessResults([]);
     setHasCompletedRun(false);
@@ -718,12 +762,43 @@ const BulkEpisodeAddPage = ({
   const isRangeInvalid =
     excelEndRow !== undefined && excelEndRow < (excelStartRow ?? 4);
 
+  const parsedRowList = parseRowListInput(excelRowListInput);
+  const isListInvalid =
+    excelRowListInput.trim() !== "" && parsedRowList.length === 0;
+
+  const isSelectionInvalid =
+    rowSelectionMode === "range" ? isRangeInvalid : isListInvalid;
+
   useEffect(() => {
-    if (excelFile && selectedSheet) {
-      const startRow = excelStartRow ?? 4;
-      scheduleParse(excelFile, selectedSheet, startRow, excelEndRow);
+    if (!excelFile || !selectedSheet) return;
+
+    if (rowSelectionMode === "list") {
+      if (parsedRowList.length > 0) {
+        scheduleParse(excelFile, selectedSheet, {
+          mode: "list",
+          rows: parsedRowList,
+        });
+      } else {
+        setSheetData([]);
+      }
+      return;
     }
-  }, [excelFile, selectedSheet, excelStartRow, excelEndRow, scheduleParse]);
+
+    const startRow = excelStartRow ?? 4;
+    scheduleParse(excelFile, selectedSheet, {
+      mode: "range",
+      start: startRow,
+      end: excelEndRow,
+    });
+  }, [
+    excelFile,
+    selectedSheet,
+    excelStartRow,
+    excelEndRow,
+    rowSelectionMode,
+    excelRowListInput,
+    scheduleParse,
+  ]);
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -840,69 +915,114 @@ const BulkEpisodeAddPage = ({
 
           {rawRows.length > 1 && (
             <div className={fieldClass}>
-              <div className="mb-2 flex items-center gap-5">
+              <div className="mb-2 flex flex-wrap items-center gap-5">
                 <span className={fieldLabelClass}>
                   적용 범위 (엑셀 행 번호)
                 </span>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={isAllRows}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setIsAllRows(true);
-                        setExcelStartRow(4);
-                        setExcelEndRow(rawRows.length + 2);
-                      } else {
-                        setIsAllRows(false);
-                      }
-                    }}
-                    className="mr-2"
-                    id="episodeBulkAllRowsCheckbox"
-                  />
-                  <label
-                    htmlFor="episodeBulkAllRowsCheckbox"
-                    className={fieldLabelClass}
-                  >
-                    전체 (모든 행)
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-1.5 text-sm">
+                    <input
+                      type="radio"
+                      name="episodeBulkRowSelectionMode"
+                      checked={rowSelectionMode === "range"}
+                      onChange={() => setRowSelectionMode("range")}
+                    />
+                    범위로 선택
+                  </label>
+                  <label className="flex items-center gap-1.5 text-sm">
+                    <input
+                      type="radio"
+                      name="episodeBulkRowSelectionMode"
+                      checked={rowSelectionMode === "list"}
+                      onChange={() => setRowSelectionMode("list")}
+                    />
+                    행 번호 직접 입력
                   </label>
                 </div>
+                {rowSelectionMode === "range" && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={isAllRows}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setIsAllRows(true);
+                          setExcelStartRow(4);
+                          setExcelEndRow(rawRows.length + 2);
+                        } else {
+                          setIsAllRows(false);
+                        }
+                      }}
+                      className="mr-2"
+                      id="episodeBulkAllRowsCheckbox"
+                    />
+                    <label
+                      htmlFor="episodeBulkAllRowsCheckbox"
+                      className={fieldLabelClass}
+                    >
+                      전체 (모든 행)
+                    </label>
+                  </div>
+                )}
               </div>
-              <div className="flex gap-4 items-center">
-                <input
-                  type="number"
-                  min={4}
-                  value={excelStartRow ?? ""}
-                  onChange={(e) => {
-                    const newStart = e.target.value
-                      ? Number(e.target.value)
-                      : undefined;
-                    setExcelStartRow(newStart);
-                    setIsAllRows(false);
-                  }}
-                  className={inputClass + " w-24"}
-                  placeholder="4"
-                  disabled={isAllRows}
-                />
-                <span>~</span>
-                <input
-                  type="number"
-                  max={rawRows.length + 2}
-                  value={excelEndRow ?? ""}
-                  onChange={(e) => {
-                    const newEnd = e.target.value
-                      ? Number(e.target.value)
-                      : undefined;
-                    setExcelEndRow(newEnd);
-                    setIsAllRows(false);
-                  }}
-                  className={inputClass + " w-24"}
-                  placeholder={
-                    rawRows.length > 0 ? String(rawRows.length + 2) : "끝행"
-                  }
-                  disabled={isAllRows}
-                />
-              </div>
+
+              {rowSelectionMode === "range" ? (
+                <div className="flex gap-4 items-center">
+                  <input
+                    type="number"
+                    min={4}
+                    value={excelStartRow ?? ""}
+                    onChange={(e) => {
+                      const newStart = e.target.value
+                        ? Number(e.target.value)
+                        : undefined;
+                      setExcelStartRow(newStart);
+                      setIsAllRows(false);
+                    }}
+                    className={inputClass + " w-24"}
+                    placeholder="4"
+                    disabled={isAllRows}
+                  />
+                  <span>~</span>
+                  <input
+                    type="number"
+                    max={rawRows.length + 2}
+                    value={excelEndRow ?? ""}
+                    onChange={(e) => {
+                      const newEnd = e.target.value
+                        ? Number(e.target.value)
+                        : undefined;
+                      setExcelEndRow(newEnd);
+                      setIsAllRows(false);
+                    }}
+                    className={inputClass + " w-24"}
+                    placeholder={
+                      rawRows.length > 0 ? String(rawRows.length + 2) : "끝행"
+                    }
+                    disabled={isAllRows}
+                  />
+                </div>
+              ) : (
+                <div>
+                  <input
+                    type="text"
+                    value={excelRowListInput}
+                    onChange={(e) => setExcelRowListInput(e.target.value)}
+                    className={inputClass}
+                    placeholder="예: 4, 10, 15"
+                  />
+                  <p className="mt-1 text-xs text-slate-400">
+                    쉼표(,) 또는 공백으로 구분해 원하는 엑셀 행 번호를 입력하세요.
+                    (예: 4, 10, 15)
+                  </p>
+                  {isListInvalid && (
+                    <p className="mt-1 text-sm text-rose-500">
+                      올바른 행 번호를 입력해 주세요. (4 이상의 숫자를 쉼표나
+                      공백으로 구분)
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -967,7 +1087,7 @@ const BulkEpisodeAddPage = ({
           {/* 작업 시작 버튼 */}
           {rawRows.length > 1 && (
             <div className={fieldClass}>
-              {isRangeInvalid && (
+              {rowSelectionMode === "range" && isRangeInvalid && (
                 <p className="mb-2 text-sm text-rose-500">
                   끝 행이 시작 행보다 작습니다. 범위를 올바르게 입력해 주세요.
                 </p>
@@ -975,7 +1095,7 @@ const BulkEpisodeAddPage = ({
               <button
                 onClick={handleBulkAddAll}
                 disabled={
-                  isProcessing || isRangeInvalid || sheetData.length === 0
+                  isProcessing || isSelectionInvalid || sheetData.length === 0
                 }
                 className={ghostButtonClass + " px-8 py-2"}
               >
