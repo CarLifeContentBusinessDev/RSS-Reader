@@ -3,18 +3,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { GuidePanel } from "../components/GuidePanel";
 import { LABELS } from "../constants/labels";
-import {
-  BASE_URL,
-  buildImageFolder,
-  DEFAUKLT_LANGUAGE,
-  PROGRAM_BULK_GUIDE_STEPS,
-} from "../constants/options";
-import {
-  COUNTRY_OPTIONS,
-  detectCountryFromSheetName,
-  LANGUAGE_OPTIONS,
-  type CountryCode,
-} from "../constants/language";
+import { DEFAUKLT_LANGUAGE, LANGUAGE_MAPPING_GUIDE_STEPS } from "../constants/options";
+import { detectLanguageFromSheetName, LANGUAGE_OPTIONS } from "../constants/language";
 import {
   fieldClass,
   fieldLabelClass,
@@ -23,11 +13,8 @@ import {
   panelClass,
 } from "../constants/style";
 import { useAuthGuard } from "../hooks/useAuthGuard";
-import { useImageDownload } from "../hooks/useImageDownload";
 import type { ToastTone } from "../types";
 import { supabase } from "../lib/supabaseClient";
-import { buildR2ImageUrl } from "../utils/r2";
-import { parseProgramRss } from "../utils/rss";
 
 // 타입 정의
 interface ExcelRow {
@@ -42,34 +29,34 @@ interface LogEntry {
 interface ProcessResult {
   title: string;
   programId?: number;
-  status: "success" | "failed" | "pass";
+  status: "inserted" | "skipped" | "failed";
   reason?: string;
 }
 
-interface BulkProgramAddPageProps {
+// 팀 공유 엑셀 템플릿은 항상 헤더가 3행(0-indexed 2)에 고정되어 있다
+// (BulkEpisodeAddPage/AudioRemappingPage/CategoryRemappingPage와 동일).
+const HEADER_ROW_OFFSET = 2;
+
+interface LanguageMappingPageProps {
   authUserEmail: string | null;
   onRequireLogin: () => void;
   showToast: (message: string, tone?: ToastTone) => void;
 }
 
-const BulkProgramAddPage = ({
+const LanguageMappingPage = ({
   authUserEmail,
   onRequireLogin,
   showToast,
-}: BulkProgramAddPageProps) => {
+}: LanguageMappingPageProps) => {
   useAuthGuard({ authUserEmail, onRequireLogin, showToast });
-  const { compressToWebP, uploadImageToR2 } = useImageDownload({ showToast });
 
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>("");
   const [selectedLanguage, setSelectedLanguage] =
     useState<string>(DEFAUKLT_LANGUAGE);
-  const [selectedCountry, setSelectedCountry] = useState<CountryCode>("KR");
   const [sheetData, setSheetData] = useState<ExcelRow[]>([]);
   const [rawRows, setRawRows] = useState<string[][]>([]);
-  // 헤더가 위치한 행의 0-indexed 오프셋 (예: 헤더가 엑셀 1행이면 0, 3행이면 2)
-  const [headerOffset, setHeaderOffset] = useState<number>(0);
   const [excelStartRow, setExcelStartRow] = useState<number | undefined>(
     undefined,
   );
@@ -83,35 +70,15 @@ const BulkProgramAddPage = ({
   const logsEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 실제 팀 공유 엑셀 템플릿 헤더명 (AudioRemappingPage/에피소드 일괄 추가와 동일 시트 사용)
+  // 실제 팀 공유 엑셀 템플릿 헤더명 (프로그램/카테고리 일괄 작업과 동일 시트 재사용)
   const REQUIRED_COLUMNS: { key: string; label: string }[] = [
-    { key: "현 데모 순위", label: "현 데모 순위" },
     { key: "program_id", label: "program_id" },
     { key: "채널명", label: "채널명" },
-    { key: "제작사", label: "제작사(방송사)" },
-    { key: "픽클 카테고리", label: "픽클 카테고리" },
-    { key: "픽클 카테고리 id", label: "픽클 카테고리 ID" },
-    { key: "rss", label: "RSS" },
   ];
-
-  // 엑셀 파일마다 헤더 행 위치가 다를 수 있어("RSS" 컬럼이 1행에 있는 경우 /
-  // 기존 팀 템플릿처럼 3행에 있는 경우 모두 지원), 헤더 셀 값으로 자동 탐색한다.
-  const findHeaderRowIndex = (matrix: string[][]): number => {
-    const maxScan = Math.min(matrix.length, 10);
-    for (let i = 0; i < maxScan; i += 1) {
-      const cells = (matrix[i] || []).map((cell) =>
-        String(cell ?? "")
-          .trim()
-          .toLowerCase(),
-      );
-      if (cells.includes("rss")) return i;
-    }
-    return 0;
-  };
 
   const appendLog = (message: string, type: LogEntry["type"] = "info") => {
     setLogs((prev) => [...prev, { message, type }]);
-    const prefix = `[ProgramBulk][${type.toUpperCase()}]`;
+    const prefix = `[LanguageMap][${type.toUpperCase()}]`;
     if (type === "error") {
       console.error(`${prefix} ${message}`);
       return;
@@ -134,80 +101,59 @@ const BulkProgramAddPage = ({
       .trim();
   };
 
-  const getRowLanguage = (row: ExcelRow, fallback = DEFAUKLT_LANGUAGE) => {
-    const raw =
-      row["language"] ??
-      row["Language"] ??
-      row["LANGUAGE"] ??
-      row["lang"] ??
-      row["Lang"] ??
-      row["언어"] ??
-      fallback;
+  // 일부 xlsx 파일은 워크시트의 사용된 범위(!ref)가 실제 데이터보다 짧게
+  // 기록되어 있어, sheet_to_json이 그 범위를 넘는 행을 조용히 누락시킨다.
+  // 실제 셀 주소를 스캔해서 !ref를 다시 계산해 이 문제를 우회한다.
+  const fixWorksheetRange = (ws: XLSX.WorkSheet) => {
+    let maxRow = 0;
+    let maxCol = 0;
+    let found = false;
 
-    const normalized = String(raw || "")
-      .trim()
-      .toLowerCase();
-    return normalized || String(fallback).trim().toLowerCase();
+    for (const key in ws) {
+      if (key.startsWith("!")) continue;
+      if (!/^[A-Z]+[0-9]+$/.test(key)) continue;
+      const decoded = XLSX.utils.decode_cell(key);
+      found = true;
+      if (decoded.r > maxRow) maxRow = decoded.r;
+      if (decoded.c > maxCol) maxCol = decoded.c;
+    }
+    if (!found) return;
+
+    const existing = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]) : null;
+    if (existing && existing.e.r >= maxRow && existing.e.c >= maxCol) return;
+
+    ws["!ref"] = XLSX.utils.encode_range({
+      s: { r: 0, c: 0 },
+      e: { r: maxRow, c: maxCol },
+    });
   };
 
-  const detectLanguageFromSheetName = (
-    sheetName: string,
-    fallback = DEFAUKLT_LANGUAGE,
-  ) => {
-    const normalized = String(sheetName || "")
-      .trim()
-      .toLowerCase();
-    if (!normalized) return fallback;
+  // 병합된 셀은 왼쪽 위(anchor) 셀에만 실제 값이 저장되고, 병합 범위의 나머지
+  // 행/열은 화면에는 값이 이어져 보이지만 실제로는 빈 셀이다. sheet_to_json은
+  // 이 빈 셀을 그대로 읽으므로, 병합 범위 전체에 anchor 값을 복사해 채워준다.
+  const fillMergedCells = (ws: XLSX.WorkSheet) => {
+    const merges = ws["!merges"];
+    if (!merges || merges.length === 0) return;
 
-    const prefix = normalized.split(/[_\-\s]+/)[0];
-    const codeMap: Record<string, string> = {
-      ko: "ko",
-      kr: "ko",
-      en: "en",
-      us: "en",
-      de: "de",
-      jp: "jp",
-      ja: "jp",
-      in: "in",
-      uk: "uk",
-      fr: "fr",
-      es: "es",
-      it: "it",
-    };
-    if (codeMap[prefix]) return codeMap[prefix];
+    for (const merge of merges) {
+      const anchorAddr = XLSX.utils.encode_cell(merge.s);
+      const anchorCell = ws[anchorAddr];
+      if (!anchorCell) continue;
 
-    if (normalized.includes("미국") || normalized.includes("english"))
-      return "en";
-    if (normalized.includes("한국") || normalized.includes("korea"))
-      return "ko";
-    if (normalized.includes("독일") || normalized.includes("german"))
-      return "de";
-    if (normalized.includes("일본") || normalized.includes("japan"))
-      return "jp";
-    if (normalized.includes("인도") || normalized.includes("india"))
-      return "in";
-    if (normalized.includes("영국") || normalized.includes("britain"))
-      return "uk";
-    if (normalized.includes("프랑스") || normalized.includes("france"))
-      return "fr";
-    if (normalized.includes("스페인") || normalized.includes("spain"))
-      return "es";
-    if (normalized.includes("이탈리아") || normalized.includes("italy"))
-      return "it";
-
-    return fallback;
+      for (let r = merge.s.r; r <= merge.e.r; r += 1) {
+        for (let c = merge.s.c; c <= merge.e.c; c += 1) {
+          const addr = XLSX.utils.encode_cell({ r, c });
+          if (addr === anchorAddr) continue;
+          ws[addr] = { ...anchorCell };
+        }
+      }
+    }
   };
 
   const parseDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const parseSheetData = useCallback(
-    (
-      file: File,
-      sheetName: string,
-      start: number,
-      end: number | undefined,
-      offset: number,
-    ) => {
+    (file: File, sheetName: string, start: number, end: number | undefined) => {
       const reader = new FileReader();
       reader.onload = (evt) => {
         const data = evt.target?.result;
@@ -215,20 +161,22 @@ const BulkProgramAddPage = ({
         const workbook = XLSX.read(data, { type: "array" });
         const ws = workbook.Sheets[sheetName];
         if (!ws) return;
+        fixWorksheetRange(ws);
+        fillMergedCells(ws);
         const rows = XLSX.utils.sheet_to_json<string[]>(ws, {
           header: 1,
           defval: "",
-          range: offset,
+          range: HEADER_ROW_OFFSET,
         });
         if (rows.length === 0) return;
 
         const currentHeader = rows[0].map((h) => String(h).trim().toLowerCase());
         setRawRows(rows);
 
-        const finalEndRow = end ?? rows.length + offset;
+        const finalEndRow = end ?? rows.length + HEADER_ROW_OFFSET;
 
         const dataRows = rows
-          .slice(start - offset - 1, finalEndRow - offset)
+          .slice(start - HEADER_ROW_OFFSET - 1, finalEndRow - HEADER_ROW_OFFSET)
           .map((row) => {
             const obj: ExcelRow = {};
             currentHeader.forEach((h, i) => {
@@ -244,17 +192,11 @@ const BulkProgramAddPage = ({
   );
 
   const scheduleParse = useCallback(
-    (
-      file: File,
-      sheet: string,
-      start: number,
-      end: number | undefined,
-      offset: number,
-    ) => {
+    (file: File, sheet: string, start: number, end: number | undefined) => {
       if (parseDebounceRef.current) clearTimeout(parseDebounceRef.current);
       if (end !== undefined && end < start) return;
       parseDebounceRef.current = setTimeout(() => {
-        parseSheetData(file, sheet, start, end, offset);
+        parseSheetData(file, sheet, start, end);
       }, 200);
     },
     [parseSheetData],
@@ -266,17 +208,17 @@ const BulkProgramAddPage = ({
       const workbook = XLSX.read(evt.target?.result, { type: "array" });
       const ws = workbook.Sheets[sheetName];
       if (!ws) return;
-      const fullMatrix = XLSX.utils.sheet_to_json<string[]>(ws, {
+      fixWorksheetRange(ws);
+      fillMergedCells(ws);
+      const rows = XLSX.utils.sheet_to_json<string[]>(ws, {
         header: 1,
         defval: "",
+        range: HEADER_ROW_OFFSET,
       });
-      const detectedOffset = findHeaderRowIndex(fullMatrix);
-      const rows = fullMatrix.slice(detectedOffset);
 
       if (rows.length > 0) {
-        const lastRow = detectedOffset + rows.length;
-        setHeaderOffset(detectedOffset);
-        setExcelStartRow(detectedOffset + 2);
+        const lastRow = rows.length + HEADER_ROW_OFFSET;
+        setExcelStartRow(HEADER_ROW_OFFSET + 2);
         setExcelEndRow(lastRow);
         setIsAllRows(false);
         setRawRows(rows);
@@ -303,9 +245,6 @@ const BulkProgramAddPage = ({
         setSelectedLanguage((prev) =>
           detectLanguageFromSheetName(firstSheet, prev),
         );
-        setSelectedCountry((prev) =>
-          detectCountryFromSheetName(firstSheet, prev),
-        );
         updateRangeAutomatically(file, firstSheet);
       }
     };
@@ -315,7 +254,6 @@ const BulkProgramAddPage = ({
   const handleSheetChange = (sheetName: string) => {
     setSelectedSheet(sheetName);
     setSelectedLanguage((prev) => detectLanguageFromSheetName(sheetName, prev));
-    setSelectedCountry((prev) => detectCountryFromSheetName(sheetName, prev));
     setIsAllRows(false);
     if (excelFile) {
       updateRangeAutomatically(excelFile, sheetName);
@@ -328,7 +266,6 @@ const BulkProgramAddPage = ({
     setSelectedSheet("");
     setSheetData([]);
     setRawRows([]);
-    setHeaderOffset(0);
     setExcelStartRow(undefined);
     setExcelEndRow(undefined);
     setIsAllRows(false);
@@ -340,235 +277,130 @@ const BulkProgramAddPage = ({
     }
   };
 
-  const handleBulkProgramAddAll = useCallback(async () => {
+  // Supabase/PostgREST는 명시적 range 없이 select하면 기본 최대 행 수(보통 1000)로
+  // 잘려서 반환된다. programs 테이블이 그보다 크면 일부 program_id가 누락되어
+  // "프로그램 찾기 실패"가 발생하므로, 끝까지 페이지네이션해서 전부 가져온다.
+  const fetchAllPrograms = async (): Promise<
+    { id: number; title: string; language: string[] | null }[]
+  > => {
+    const PAGE_SIZE = 1000;
+    const all: { id: number; title: string; language: string[] | null }[] = [];
+    let from = 0;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from("programs")
+        .select("id, title, language")
+        .range(from, from + PAGE_SIZE - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+
+      all.push(...data);
+      if (data.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+
+    return all;
+  };
+
+  const handleLanguageMapAll = useCallback(async () => {
     if (isProcessing) return;
     setIsProcessing(true);
     setHasCompletedRun(false);
     setProcessResults([]);
-    const startMessage = "🚀 프로그램 일괄 추가 작업을 시작합니다.";
+    const startMessage = "🚀 언어 매핑 확인/추가 작업을 시작합니다.";
     setLogs([{ message: startMessage, type: "info" }]);
-    console.info(`[ProgramBulk][INFO] ${startMessage}`);
+    console.info(`[LanguageMap][INFO] ${startMessage}`);
 
-    const defaultLanguage = selectedLanguage;
+    const targetLanguage = selectedLanguage.trim().toLowerCase();
     const currentResults: ProcessResult[] = [];
 
     try {
+      const allPrograms = await fetchAllPrograms();
+
       for (let i = 0; i < sheetData.length; i++) {
         const row = sheetData[i];
         const rowIdx = i + 1;
         const rowTotal = sheetData.length;
-        const rowLanguage = getRowLanguage(row, defaultLanguage);
         const channelName = String(row["채널명"] || "").trim();
-        const existingProgramId = String(row["program_id"] || "").trim();
-        const rssUrl = String(row["rss"] || row["RSS"] || "").trim();
-        const typeValue =
-          String(row["type"] || row["Type"] || "podcast").trim() ||
-          "podcast";
-        const categoryText = String(
-          row["픽클 카테고리"] || row["카테고리"] || "",
-        ).trim();
-        const broadcastingText = String(
-          row["제작사"] || row["방송사"] || "",
-        ).trim();
+        const programIdCell = String(row["program_id"] || "").trim();
+        const rowLabel = channelName || programIdCell || `행 ${rowIdx}`;
 
         try {
-          if (existingProgramId) {
+          // 1. 프로그램 매칭 - program_id 우선, 실패 시 채널명(정규화) 매칭
+          let prog = programIdCell
+            ? allPrograms.find((p) => String(p.id) === programIdCell)
+            : undefined;
+          if (!prog && channelName) {
+            const normChannel = normalizeTitle(channelName);
+            prog = allPrograms.find(
+              (p) => normalizeTitle(p.title) === normChannel,
+            );
+          }
+          if (!prog) {
             appendLog(
-              `[R ${rowIdx}/${rowTotal}] [${channelName || rssUrl}] ⏭️ 이미 program_id(${existingProgramId})가 있어 스킵`,
-              "info",
+              `[R ${rowIdx}/${rowTotal}] [${rowLabel}] ❌ 프로그램 찾기 실패 (program_id/채널명 불일치)`,
+              "error",
             );
             currentResults.push({
-              title: channelName || rssUrl || `행 ${rowIdx}`,
-              programId: Number(existingProgramId) || undefined,
-              status: "pass",
+              title: rowLabel,
+              status: "failed",
+              reason: "프로그램 찾기 실패",
             });
             continue;
           }
 
-          if (!rssUrl) throw new Error("RSS 정보 부족");
-
-          const rssRes = await fetch(
-            `/api/rss?url=${encodeURIComponent(rssUrl)}`,
+          // 2. 기존 language 배열에 이미 포함되어 있으면 할 일 없음
+          const currentLanguages = prog.language ?? [];
+          const alreadyIncluded = currentLanguages.some(
+            (lang) => String(lang).trim().toLowerCase() === targetLanguage,
           );
-          if (!rssRes.ok) {
-            const failureText = await rssRes.text();
-            const failurePreview = failureText
-              .slice(0, 180)
-              .replace(/\s+/g, " ")
-              .trim();
-            throw new Error(
-              `RSS 요청 실패 (${rssRes.status}): ${failurePreview || rssRes.statusText}`,
-            );
-          }
-          const rssText = await rssRes.text();
-          const parsed = parseProgramRss(rssText);
-
-          // 중복 프로그램 체크 (같은 language 내 제목 정규화 일치)
-          const { data: existingPrograms, error: existingErr } =
-            await supabase
-              .from("programs")
-              .select("id, title")
-              .contains("language", [rowLanguage]);
-          if (existingErr) throw new Error("기존 프로그램 조회 실패");
-
-          const normTitle = normalizeTitle(parsed.title);
-          const duplicate = (existingPrograms ?? []).find(
-            (p: any) => normalizeTitle(p.title) === normTitle,
-          );
-          if (duplicate) {
+          if (alreadyIncluded) {
             appendLog(
-              `[R ${rowIdx}/${rowTotal}] [${parsed.title}] ⏭️ 이미 등록된 프로그램 (ID: ${duplicate.id}) - 스킵`,
+              `[R ${rowIdx}/${rowTotal}] [채널(${prog.id}): ${rowLabel}] ⏭️ 이미 포함됨 (language: ${targetLanguage}) - 스킵`,
               "info",
             );
             currentResults.push({
-              title: parsed.title,
-              programId: duplicate.id,
-              status: "pass",
+              title: channelName || prog.title,
+              programId: prog.id,
+              status: "skipped",
             });
             continue;
           }
 
-          // 카테고리 ID 우선 매칭 (픽클 카테고리 ID 컬럼) → 없으면 텍스트 매칭 폴백
-          let categoryId: number | undefined;
-          const categoryIdRaw = String(row["픽클 카테고리 id"] ?? "").trim();
-          const parsedCategoryId = categoryIdRaw ? Number(categoryIdRaw) : NaN;
-
-          if (
-            categoryIdRaw &&
-            Number.isFinite(parsedCategoryId) &&
-            parsedCategoryId > 0
-          ) {
-            categoryId = parsedCategoryId;
-          } else if (categoryText) {
-            const { data: cats } = await supabase
-              .from("categories")
-              .select("id, title")
-              .contains("language", [rowLanguage]);
-            const normCat = normalizeTitle(categoryText);
-            const foundCat = (cats ?? []).find(
-              (c: any) => normalizeTitle(c.title) === normCat,
-            );
-            if (foundCat) {
-              categoryId = foundCat.id;
-            } else {
-              appendLog(
-                `[R ${rowIdx}/${rowTotal}] [${parsed.title}] ⚠️ 카테고리 '${categoryText}' 매칭 실패 - NULL로 진행`,
-                "info",
-              );
-            }
-          }
-
-          // 방송사 텍스트 매칭
-          let broadcastingId: number | undefined;
-          if (broadcastingText) {
-            const { data: broads } = await supabase
-              .from("broadcastings")
-              .select("id, title")
-              .contains("language", [rowLanguage]);
-            const normBroad = normalizeTitle(broadcastingText);
-            const foundBroad = (broads ?? []).find(
-              (b: any) => normalizeTitle(b.title) === normBroad,
-            );
-            if (foundBroad) {
-              broadcastingId = foundBroad.id;
-            } else {
-              appendLog(
-                `[R ${rowIdx}/${rowTotal}] [${parsed.title}] ⚠️ 방송사 '${broadcastingText}' 매칭 실패 - NULL로 진행`,
-                "info",
-              );
-            }
-          }
-
-          // 이미지 다운로드 → webp 압축 → R2 업로드
-          const imageFolder = buildImageFolder(rowLanguage);
-          let finalImgUrl = "";
-          if (parsed.imgUrl) {
-            try {
-              const downloadRes = await fetch(
-                `/api/download?url=${encodeURIComponent(parsed.imgUrl)}`,
-              );
-              if (!downloadRes.ok) {
-                throw new Error(`이미지 다운로드 실패 (${downloadRes.status})`);
-              }
-              const blob = await downloadRes.blob();
-              const { blob: compressed } = await compressToWebP(blob);
-              const uploadResult = await uploadImageToR2(
-                compressed,
-                imageFolder,
-                `${parsed.title}.webp`,
-              );
-              if (!uploadResult) throw new Error("이미지 업로드 실패");
-              finalImgUrl = buildR2ImageUrl(
-                parsed.title,
-                BASE_URL,
-                imageFolder,
-                "webp",
-                rowLanguage,
-              );
-            } catch (imgErr: any) {
-              appendLog(
-                `[R ${rowIdx}/${rowTotal}] [${parsed.title}] ⚠️ 이미지 처리 실패: ${imgErr?.message || imgErr} - img_url 없이 진행`,
-                "info",
-              );
-            }
-          }
-
-          const { data: inserted, error: insertErr } = await supabase
+          // 3. language 배열에 추가
+          const nextLanguages = [...currentLanguages, targetLanguage];
+          const { data: updatedRows, error: updateErr } = await supabase
             .from("programs")
-            .insert({
-              title: parsed.title,
-              subtitle: broadcastingText || parsed.subtitle,
-              img_url: finalImgUrl,
-              type: typeValue,
-              language: [rowLanguage],
-              category_id: categoryId ?? null,
-              broadcasting_id: broadcastingId ?? null,
-            })
-            .select("id")
-            .single();
-
-          if (insertErr || !inserted) {
-            throw new Error(insertErr?.message || "프로그램 추가 실패");
-          }
-
-          if (categoryId) {
-            try {
-              const country = selectedCountry;
-              const { error: catInsertErr } = await supabase
-                .from("programs_categories")
-                .insert({
-                  category_id: categoryId,
-                  program_id: inserted.id,
-                  language: rowLanguage.toLowerCase(),
-                  country,
-                });
-              if (catInsertErr) throw catInsertErr;
-            } catch (catErr: any) {
-              appendLog(
-                `[R ${rowIdx}/${rowTotal}] [채널(${inserted.id}): ${parsed.title}] ⚠️ programs_categories 추가 실패: ${catErr?.message || catErr}`,
-                "error",
-              );
-            }
+            .update({ language: nextLanguages })
+            .eq("id", prog.id)
+            .select("id");
+          if (updateErr) throw updateErr;
+          // Postgres UPDATE는 WHERE/RLS로 대상 행이 0건이어도 에러 없이 성공 응답을 준다.
+          // .select()로 실제 반영된 행을 돌려받아 확인하지 않으면 "성공"으로 오판된다.
+          if (!updatedRows || updatedRows.length === 0) {
+            throw new Error(
+              "업데이트가 반영되지 않음 (RLS 정책 등 권한 문제로 추정)",
+            );
           }
 
           appendLog(
-            `[R ${rowIdx}/${rowTotal}] [채널(${inserted.id}): ${parsed.title}] ✅ 추가 완료`,
+            `[R ${rowIdx}/${rowTotal}] [채널(${prog.id}): ${rowLabel}] ✅ language 추가 (${targetLanguage})`,
             "success",
           );
           currentResults.push({
-            title: parsed.title,
-            programId: inserted.id,
-            status: "success",
+            title: channelName || prog.title,
+            programId: prog.id,
+            status: "inserted",
           });
         } catch (err: any) {
           const failReason = err?.message || "오류 발생";
           appendLog(
-            `[R ${rowIdx}/${rowTotal}] [RSS: ${rssUrl || "-"}] ❌ 실패: ${failReason}`,
+            `[R ${rowIdx}/${rowTotal}] [${rowLabel}] ❌ 실패: ${failReason}`,
             "error",
           );
           currentResults.push({
-            title: rssUrl || `행 ${rowIdx}`,
-            programId: undefined,
+            title: rowLabel,
             status: "failed",
             reason: failReason,
           });
@@ -577,11 +409,11 @@ const BulkProgramAddPage = ({
     } finally {
       setIsProcessing(false);
       setHasCompletedRun(true);
-      const successCount = currentResults.filter(
-        (result) => result.status === "success",
+      const insertedCount = currentResults.filter(
+        (result) => result.status === "inserted",
       ).length;
-      const passCount = currentResults.filter(
-        (result) => result.status === "pass",
+      const skippedCount = currentResults.filter(
+        (result) => result.status === "skipped",
       ).length;
       const failedCount = currentResults.filter(
         (result) => result.status === "failed",
@@ -589,38 +421,24 @@ const BulkProgramAddPage = ({
       const totalCount = currentResults.length;
       appendLog(
         failedCount > 0
-          ? `⚠️ 작업 종료 (성공: ${successCount}건, 스킵: ${passCount}건, 실패: ${failedCount}건, 전체: ${totalCount}건)`
-          : `🎉 작업 종료 (성공: ${successCount}건, 스킵: ${passCount}건, 전체: ${totalCount}건)`,
+          ? `⚠️ 작업 종료 (추가: ${insertedCount}건, 스킵: ${skippedCount}건, 실패: ${failedCount}건, 전체: ${totalCount}건)`
+          : `🎉 작업 종료 (추가: ${insertedCount}건, 스킵: ${skippedCount}건, 전체: ${totalCount}건)`,
         failedCount > 0 ? "error" : "success",
       );
       setProcessResults(currentResults);
     }
-  }, [
-    sheetData,
-    selectedLanguage,
-    selectedCountry,
-    isProcessing,
-    compressToWebP,
-    uploadImageToR2,
-  ]);
+  }, [sheetData, selectedLanguage, isProcessing]);
 
   const isRangeInvalid =
     excelEndRow !== undefined &&
-    excelEndRow < (excelStartRow ?? headerOffset + 2);
+    excelEndRow < (excelStartRow ?? HEADER_ROW_OFFSET + 2);
 
   useEffect(() => {
     if (excelFile && selectedSheet) {
-      const startRow = excelStartRow ?? headerOffset + 2;
-      scheduleParse(excelFile, selectedSheet, startRow, excelEndRow, headerOffset);
+      const startRow = excelStartRow ?? HEADER_ROW_OFFSET + 2;
+      scheduleParse(excelFile, selectedSheet, startRow, excelEndRow);
     }
-  }, [
-    excelFile,
-    selectedSheet,
-    excelStartRow,
-    excelEndRow,
-    headerOffset,
-    scheduleParse,
-  ]);
+  }, [excelFile, selectedSheet, excelStartRow, excelEndRow, scheduleParse]);
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -631,13 +449,13 @@ const BulkProgramAddPage = ({
       <header className="flex gap-8 items-center">
         <div>
           <h1 className="mb-3 text-[clamp(2.6rem,4vw,4.2rem)]">
-            {LABELS.PAGE.PROGRAM_BULK.TITLE}
+            {LABELS.PAGE.LANGUAGE_MAPPING.TITLE}
           </h1>
           <p className="text-[1.1rem] text-ink-muted">
-            {LABELS.PAGE.PROGRAM_BULK.DESCRIPTION}
+            {LABELS.PAGE.LANGUAGE_MAPPING.DESCRIPTION}
           </p>
         </div>
-        <GuidePanel guide_steps={PROGRAM_BULK_GUIDE_STEPS} />
+        <GuidePanel guide_steps={LANGUAGE_MAPPING_GUIDE_STEPS} />
       </header>
 
       <section className={panelClass}>
@@ -647,13 +465,13 @@ const BulkProgramAddPage = ({
             <span className={fieldLabelClass}>엑셀 파일 업로드</span>
             <div className="flex items-center gap-3">
               <label
-                htmlFor="program-bulk-excel-upload"
+                htmlFor="language-map-excel-upload"
                 className={`${ghostButtonClass} cursor-pointer px-4 py-2 text-sm inline-block`}
               >
                 파일 선택
               </label>
               <input
-                id="program-bulk-excel-upload"
+                id="language-map-excel-upload"
                 ref={fileInputRef}
                 type="file"
                 accept=".xlsx,.xls"
@@ -684,7 +502,7 @@ const BulkProgramAddPage = ({
             </div>
           </div>
 
-          {/* 시트 선택 및 범위 설정 */}
+          {/* 시트 선택 및 언어 설정 */}
           {sheetNames.length > 0 && (
             <div className={fieldClass}>
               <span className={fieldLabelClass}>시트 선택</span>
@@ -714,23 +532,6 @@ const BulkProgramAddPage = ({
                   ))}
                 </select>
               </div>
-
-              <div className="mt-3">
-                <span className={fieldLabelClass}>Country</span>
-                <select
-                  value={selectedCountry}
-                  onChange={(e) =>
-                    setSelectedCountry(e.target.value as CountryCode)
-                  }
-                  className={inputClass}
-                >
-                  {COUNTRY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
           )}
 
@@ -747,17 +548,17 @@ const BulkProgramAddPage = ({
                     onChange={(e) => {
                       if (e.target.checked) {
                         setIsAllRows(true);
-                        setExcelStartRow(headerOffset + 2);
-                        setExcelEndRow(headerOffset + rawRows.length);
+                        setExcelStartRow(HEADER_ROW_OFFSET + 2);
+                        setExcelEndRow(HEADER_ROW_OFFSET + rawRows.length);
                       } else {
                         setIsAllRows(false);
                       }
                     }}
                     className="mr-2"
-                    id="programBulkAllRowsCheckbox"
+                    id="languageMapAllRowsCheckbox"
                   />
                   <label
-                    htmlFor="programBulkAllRowsCheckbox"
+                    htmlFor="languageMapAllRowsCheckbox"
                     className={fieldLabelClass}
                   >
                     전체 (모든 행)
@@ -767,7 +568,7 @@ const BulkProgramAddPage = ({
               <div className="flex gap-4 items-center">
                 <input
                   type="number"
-                  min={headerOffset + 2}
+                  min={HEADER_ROW_OFFSET + 2}
                   value={excelStartRow ?? ""}
                   onChange={(e) => {
                     const newStart = e.target.value
@@ -777,13 +578,13 @@ const BulkProgramAddPage = ({
                     setIsAllRows(false);
                   }}
                   className={inputClass + " w-24"}
-                  placeholder={String(headerOffset + 2)}
+                  placeholder={String(HEADER_ROW_OFFSET + 2)}
                   disabled={isAllRows}
                 />
                 <span>~</span>
                 <input
                   type="number"
-                  max={headerOffset + rawRows.length}
+                  max={HEADER_ROW_OFFSET + rawRows.length}
                   value={excelEndRow ?? ""}
                   onChange={(e) => {
                     const newEnd = e.target.value
@@ -795,7 +596,7 @@ const BulkProgramAddPage = ({
                   className={inputClass + " w-24"}
                   placeholder={
                     rawRows.length > 0
-                      ? String(headerOffset + rawRows.length)
+                      ? String(HEADER_ROW_OFFSET + rawRows.length)
                       : "끝행"
                   }
                   disabled={isAllRows}
@@ -808,7 +609,7 @@ const BulkProgramAddPage = ({
           {sheetData.length > 0 && (
             <div className={fieldClass}>
               <span className={fieldLabelClass}>
-                대상 프로그램 미리보기 (상위 10행)
+                대상 매핑 미리보기 (상위 10행)
               </span>
               <div className="overflow-x-auto rounded shadow border bg-linear-to-br from-white to-slate-50">
                 <table className="min-w-full text-xs border-separate border-spacing-0">
@@ -871,13 +672,13 @@ const BulkProgramAddPage = ({
                 </p>
               )}
               <button
-                onClick={handleBulkProgramAddAll}
+                onClick={handleLanguageMapAll}
                 disabled={
                   isProcessing || isRangeInvalid || sheetData.length === 0
                 }
                 className={ghostButtonClass + " px-8 py-2"}
               >
-                {isProcessing ? "처리 중..." : "일괄 추가 시작"}
+                {isProcessing ? "처리 중..." : "언어 매핑 확인/추가 시작"}
               </button>
             </div>
           )}
@@ -978,16 +779,16 @@ const BulkProgramAddPage = ({
                         <td className="px-4 py-2 border-r border-slate-100 text-center">
                           <span
                             className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                              res.status === "success"
+                              res.status === "inserted"
                                 ? "bg-emerald-100 text-emerald-700"
-                                : res.status === "pass"
+                                : res.status === "skipped"
                                   ? "bg-amber-100 text-amber-700"
                                   : "bg-rose-100 text-rose-700"
                             }`}
                           >
-                            {res.status === "success"
-                              ? "SUCCESS"
-                              : res.status === "pass"
+                            {res.status === "inserted"
+                              ? "ADDED"
+                              : res.status === "skipped"
                                 ? "SKIP"
                                 : "FAILED"}
                           </span>
@@ -1025,4 +826,4 @@ const BulkProgramAddPage = ({
   );
 };
 
-export default BulkProgramAddPage;
+export default LanguageMappingPage;

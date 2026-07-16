@@ -25,6 +25,16 @@ export const LABELS = {
       DESCRIPTION:
         "엑셀의 RSS 목록을 기준으로 프로그램 정보를 일괄로 조회하여 추가합니다.",
     },
+    CATEGORY_REMAPPING: {
+      TITLE: "Category Mapping Fix",
+      DESCRIPTION:
+        "엑셀의 국가별 카테고리 매핑 정보를 기준으로 programs_categories 매핑을 추가/수정합니다.",
+    },
+    LANGUAGE_MAPPING: {
+      TITLE: "Language Mapping",
+      DESCRIPTION:
+        "엑셀의 국가별 채널 목록을 기준으로 programs.language 배열에 언어를 추가합니다.",
+    },
   },
 
   // 섹션 헤더

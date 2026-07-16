@@ -30,7 +30,7 @@ function toErrorMessage(err: unknown, fallback = "오류 발생"): string {
   return fallback;
 }
 
-type CountryCode = "KR" | "US" | "JP" | "GB" | "DE";
+type CountryCode = "KR" | "US" | "JP" | "GB" | "DE" | "AU";
 
 export function mapLanguageToCountry(languageCode: string): CountryCode {
   const normalized = languageCode.toLowerCase();
@@ -40,12 +40,13 @@ export function mapLanguageToCountry(languageCode: string): CountryCode {
     jp: "JP",
     uk: "GB",
     de: "DE",
+    au: "AU",
   };
 
   const mapped = countryMap[normalized];
   if (!mapped) {
     throw new Error(
-      `지원하지 않는 language입니다: ${languageCode} (가능: ko, en, jp, uk, de)`,
+      `지원하지 않는 language입니다: ${languageCode} (가능: ko, en, jp, uk, de, au)`,
     );
   }
 

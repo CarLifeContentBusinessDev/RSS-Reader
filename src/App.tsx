@@ -7,7 +7,9 @@ import AudioConvertPage from "./pages/AudioConvertPage";
 import AudioRemappingPage from "./pages/AudioRemappingPage";
 import BulkEpisodeAddPage from "./pages/BulkEpisodeAddPage";
 import BulkProgramAddPage from "./pages/BulkProgramAddPage";
+import CategoryRemappingPage from "./pages/CategoryRemappingPage";
 import EpisodesPage from "./pages/EpisodesPage";
+import LanguageMappingPage from "./pages/LanguageMappingPage";
 import ProgramsPage from "./pages/ProgramsPage";
 import type { ToastTone } from "./types";
 
@@ -211,6 +213,32 @@ function App() {
             path="/audio-convert"
             element={
               <AudioConvertPage
+                authUserEmail={authUserEmail}
+                onRequireLogin={() => {
+                  setAuthError("");
+                  setShowAuthModal(true);
+                }}
+                showToast={showToast}
+              />
+            }
+          />
+          <Route
+            path="/categories-remapping"
+            element={
+              <CategoryRemappingPage
+                authUserEmail={authUserEmail}
+                onRequireLogin={() => {
+                  setAuthError("");
+                  setShowAuthModal(true);
+                }}
+                showToast={showToast}
+              />
+            }
+          />
+          <Route
+            path="/language-mapping"
+            element={
+              <LanguageMappingPage
                 authUserEmail={authUserEmail}
                 onRequireLogin={() => {
                   setAuthError("");

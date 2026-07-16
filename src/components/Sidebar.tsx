@@ -7,6 +7,8 @@ const MENU_LINK = [
   { name: "에피소드 일괄 추가", href: "/episodes-bulk" },
   { name: "오디오파일 재매핑", href: "/audio-remapping" },
   { name: "오디오파일 변환", href: "/audio-convert" },
+  { name: "카테고리 매핑 수정", href: "/categories-remapping" },
+  { name: "프로그램 언어 매핑", href: "/language-mapping" },
 ];
 
 const NAV_LINK = [

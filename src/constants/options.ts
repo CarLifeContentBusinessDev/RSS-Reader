@@ -97,12 +97,50 @@ export const PROGRAM_BULK_GUIDE_STEPS = [
     step: "1",
     text: "엑셀 파일 업로드 - 시트와 적용 범위 입력 (RSS, type, 카테고리, 방송사 컬럼)",
     details: [
-      "카테고리/방송사는 이름(title) 텍스트로 입력, language 기준 자동 매칭",
+      "카테고리는 '픽클 카테고리 ID' 컬럼이 있으면 우선 사용, 없으면 이름(title) 텍스트로 language 기준 자동 매칭",
+      "방송사는 이름(title) 텍스트로 입력, language 기준 자동 매칭",
+      "Country는 시트명으로 자동 추정되며 직접 선택/수정 가능 (programs_categories.country에 사용)",
     ],
   },
   {
     step: "2",
     text: "작업 시작 - RSS를 조회해 이미지 자동 압축/업로드 후 programs 테이블에 추가",
     details: ["이미 등록된(제목 일치) 프로그램은 자동으로 건너뜀"],
+  },
+];
+
+export const CATEGORY_REMAPPING_GUIDE_STEPS = [
+  {
+    step: "1",
+    text: "엑셀 파일 업로드 - 국가별 시트 선택 후 Country를 확인/선택 (시트명으로 자동 추정, 직접 수정 가능)",
+    details: [
+      "필수 컬럼: program_id, 채널명, 픽클 카테고리 ID",
+      "프로그램 식별: program_id 우선, 실패 시 채널명(정규화 비교)으로 매칭",
+    ],
+  },
+  {
+    step: "2",
+    text: "작업 시작 - (program_id, country) 기준으로 programs_categories 매핑을 확인",
+    details: [
+      "매핑 없음 → 신규 추가",
+      "기존 매핑과 category_id 동일 → 스킵",
+      "기존 매핑과 category_id 다름 → 업데이트",
+    ],
+  },
+];
+
+export const LANGUAGE_MAPPING_GUIDE_STEPS = [
+  {
+    step: "1",
+    text: "엑셀 파일 업로드 - 국가별 시트 선택 후 Language를 확인/선택 (시트명으로 자동 추정, 직접 수정 가능)",
+    details: [
+      "필수 컬럼: program_id, 채널명",
+      "프로그램 식별: program_id 우선, 실패 시 채널명(정규화 비교)으로 매칭",
+    ],
+  },
+  {
+    step: "2",
+    text: "작업 시작 - 매칭된 프로그램의 language 배열에 선택한 language가 이미 포함되어 있는지 확인",
+    details: ["이미 포함 → 스킵", "미포함 → language 배열에 추가"],
   },
 ];
